@@ -6,6 +6,12 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut, UserLogin, Token
 from app.dependencies import get_current_user
+from app.core.email import send_welcome_email
+from app.core.email import email_welcome, email_password_reset
+from app.models.password_reset import PasswordResetToken
+import secrets
+from datetime import datetime, timedelta
+from app.core.email import email_welcome, email_password_reset, send_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -18,10 +24,18 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
+	is_verified=False
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    try:
+	email_welcome(user.email, user.email.split('@')[0])
+	print(f"Welcome email sent to {user.email}")
+   except Exception as e:
+       print(f"Welcome email failed: {e}")
+
     return user
 
 
@@ -35,6 +49,73 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
         )
     token = create_access_token({"sub": str(user.id)})
     return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    """Request a password reset email"""
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return {"message": "If your email is registered, you will receive a password reset link."}
+
+    # Generate reset token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=24)
+
+    # Store token
+    reset = PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=expires_at
+	used=False
+    )
+    db.add(reset)
+    db.commit()
+
+    # Send email with reset link
+    reset_link = f"https://pesapips.vercel.app/reset-password?token={token}"
+    html = f"""
+        <h2>Reset your PesaPips password</h2>
+        <p>Click the link below to reset your password. This link expires in 24 hours.</p>
+        <p><a href="{reset_link}" class="btn">Reset Password →</a></p>
+        <p>If you didn't request this, ignore this email.</p>
+    """
+    send_email(email, "Reset your PesaPips password", html)
+
+    return {"message": "If your email is registered, you will receive a password reset link."}
+
+
+@router.post("/reset-password")
+def reset_password(
+    token: str,
+    new_password: str,
+    db: Session = Depends(get_db)
+):
+    """Reset password using a valid token"""
+    reset = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == token,
+        PasswordResetToken.expires_at > datetime.utcnow(),
+        PasswordResetToken.used == False
+    ).first()
+
+    if not reset:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user = db.query(User).filter(User.id == reset.user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    # Update password
+    user.hashed_password = hash_password(new_password)
+    reset.used = True
+    db.commit()
+
+    email_password_reset(user.email, user.display_name or user.email, new_password)
+
+    return {"message": "Password reset successful. You can now log in with your new password."}
 
 
 @router.get("/me")
