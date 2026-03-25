@@ -24,17 +24,17 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
-	is_verified=False
+        is_verified=False
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
     try:
-	email_welcome(user.email, user.email.split('@')[0])
-	print(f"Welcome email sent to {user.email}")
-   except Exception as e:
-       print(f"Welcome email failed: {e}")
+        email_welcome(user.email, user.email.split('@')[0])
+        print(f"Welcome email sent to {user.email}")
+    except Exception as e:
+        print(f"Welcome email failed: {e}")
 
     return user
 
@@ -70,7 +70,7 @@ def forgot_password(
         user_id=user.id,
         token=token,
         expires_at=expires_at
-	used=False
+    used=False
     )
     db.add(reset)
     db.commit()
