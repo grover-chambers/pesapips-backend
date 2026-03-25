@@ -117,7 +117,7 @@ export default function Risk() {
         </Section>
 
         <Section title="8. Contact">
-          <p>For questions about this disclaimer: <a href="mailto:legal@pesapips.ai" style={{ color: C.gold }}>legal@pesapips.ai</a></p>
+          <p>For questions about this disclaimer: <a href="mailto:pesapipsai@gmail.com" style={{ color: C.gold }}>pesapipsai@gmail.com</a></p>
         </Section>
       </div>
 

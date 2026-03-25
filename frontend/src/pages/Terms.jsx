@@ -116,7 +116,7 @@ export default function Terms() {
         </Section>
 
         <Section title="11. Contact">
-          <p>For questions about these Terms, contact us at <a href="mailto:legal@pesapips.ai" style={{ color: C.gold }}>legal@pesapips.ai</a> or through the contact form on our website.</p>
+          <p>For questions about these Terms, contact us at <a href="mailto:pesapipsai@gmail.com" style={{ color: C.gold }}>pesapipsai@gmail.com</a> or through the contact form on our website.</p>
         </Section>
       </div>
 

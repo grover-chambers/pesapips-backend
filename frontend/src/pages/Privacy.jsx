@@ -105,7 +105,7 @@ export default function Privacy() {
             ].map((item, i) => <li key={i} style={{ marginBottom: 8 }}>{item}</li>)}
           </ul>
           <br/>
-          <p>To exercise any of these rights, contact us at <a href="mailto:privacy@pesapips.ai" style={{ color: C.gold }}>privacy@pesapips.ai</a>.</p>
+          <p>To exercise any of these rights, contact us at <a href="mailto:pesapipsai@gmail.com" style={{ color: C.gold }}>pesapipsai@gmail.com</a>.</p>
         </Section>
 
         <Section title="8. Cookies">
@@ -117,7 +117,7 @@ export default function Privacy() {
         </Section>
 
         <Section title="10. Contact">
-          <p>For privacy questions or data requests: <a href="mailto:privacy@pesapips.ai" style={{ color: C.gold }}>privacy@pesapips.ai</a></p>
+          <p>For privacy questions or data requests: <a href="mailto:pesapipsai@gmail.com" style={{ color: C.gold }}>pesapipsai@gmail.com</a></p>
         </Section>
       </div>
 
