@@ -160,11 +160,7 @@ function Nav({ activeSection }) {
       }}>
         {/* Logo */}
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{
-            width:34, height:34, background:C.gold, borderRadius:8,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontWeight:700, fontSize:17, color:"#000", fontFamily:C.sans,
-          }}>P</div>
+          <img src="/logo.png" alt="PesaPips" style={{width:34,height:34,borderRadius:8}} />
           <span style={{ fontFamily:C.display, fontSize:20, color:C.text, letterSpacing:"-0.01em" }}>PesaPips</span>
           <span style={{ fontFamily:C.mono, fontSize:9, color:C.gold, letterSpacing:"0.18em", opacity:0.8 }}>AI</span>
         </div>
@@ -865,7 +861,7 @@ function BlogPreview() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch("http://localhost:8000/blog/published?limit=3")
+    fetch("https://pesapips-backend.onrender.com/blog/published?limit=3")
       .then(res => res.json())
       .then(data => {
         setPosts(data.posts?.slice(0, 3) || [])
@@ -977,8 +973,8 @@ function Contact() {
 
           <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
             {[
-              { icon:"📧", label:"Email", value:"support@pesapips.ai" },
-              { icon:"💬", label:"WhatsApp", value:"+254 700 000 000" },
+              { icon:"📧", label:"Email", value:"pesapipsai@gmail.com" },
+              { icon:"💬", label:"WhatsApp", value:"+254 797 100144" },
               { icon:"✈️", label:"Telegram", value:"@pesapips_ai" },
               { icon:"🕐", label:"Response time", value:"Within 24 hours (Nairobi time)" },
             ].map((item,i)=>(
@@ -1168,7 +1164,7 @@ function Footer() {
             </p>
             <div style={{ fontFamily:C.mono, fontSize:10, color:C.text3, marginTop:16, lineHeight:1.8 }}>
               Nairobi, Kenya<br/>
-              support@pesapips.ai
+              pesapipsai@gmail.com
             </div>
           </div>
 
