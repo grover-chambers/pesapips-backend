@@ -97,15 +97,14 @@ def get_me(current_user: User = Depends(get_current_user)):
         "id":                current_user.id,
         "email":             current_user.email,
         "display_name":      getattr(current_user, "display_name", None),
-        "subscription_plan": current_user.subscription_plan,
-        "is_active":         current_user.is_active,
-        "is_admin":          getattr(current_user, "is_admin", False) or False,
-        "is_verified":       current_user.is_verified,
-        "points_balance":    getattr(current_user, "points_balance", 0) or 0,
-        "created_at":        current_user.created_at.isoformat() if current_user.created_at else None,
+        "subscription_plan": getattr(current_user, "subscription_plan", "free"),
+        "is_active":         getattr(current_user, "is_active", True),
+        "is_admin":          getattr(current_user, "is_admin", False),
+        "is_verified":       getattr(current_user, "is_verified", False),
+        "points_balance":    getattr(current_user, "points_balance", 0),
+        "created_at":        current_user.created_at.isoformat() if hasattr(current_user, "created_at") and current_user.created_at else None,
+        "onboarded":         getattr(current_user, "onboarded", False),
     }
-
-@router.post("/onboarding/complete")
 def complete_onboarding(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
