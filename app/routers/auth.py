@@ -9,9 +9,9 @@ from app.dependencies import get_current_user
 from app.core.email import send_welcome_email
 from app.core.email import email_welcome, email_password_reset
 from app.models.password_reset import PasswordResetToken
-import secrets
 from datetime import datetime, timedelta
 from app.core.email import email_welcome, email_password_reset, send_email
+import secrets
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -69,8 +69,8 @@ def forgot_password(
     reset = PasswordResetToken(
         user_id=user.id,
         token=token,
-        expires_at=expires_at
-    used=False
+        expires_at=expires_at,
+        used=False
     )
     db.add(reset)
     db.commit()
