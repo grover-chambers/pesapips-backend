@@ -1,0 +1,104 @@
+import pandas as pd
+from app.services.signal_engine import SignalEngine
+from app.services.risk_manager import RiskManager
+
+
+def run_backtest(df: pd.DataFrame, params: dict) -> dict:
+    """
+    Runs strategy over historical OHLCV data.
+    Returns performance stats.
+    """
+    engine = SignalEngine(params)
+    df = engine.calculate_indicators(df).dropna().copy()
+
+    balance = 10000.0
+    initial_balance = balance
+    risk_per_trade = params.get("risk_per_trade", 1.0)
+    sl_pips = params.get("sl_pips", 15)
+    tp_pips = params.get("tp_pips", 30)
+    pip_size = 0.1  # XAUUSD
+
+    trades = []
+    open_trade = None
+
+    for i in range(1, len(df)):
+        window = df.iloc[:i+1]
+        result = engine.generate_signal(window)
+        signal = result["signal"]
+        price = df.iloc[i]["close"]
+
+        # Close open trade if opposite signal or SL/TP hit
+        if open_trade:
+            hit_tp = (
+                open_trade["type"] == "BUY" and price >= open_trade["tp"]
+            ) or (
+                open_trade["type"] == "SELL" and price <= open_trade["tp"]
+            )
+            hit_sl = (
+                open_trade["type"] == "BUY" and price <= open_trade["sl"]
+            ) or (
+                open_trade["type"] == "SELL" and price >= open_trade["sl"]
+            )
+
+            if hit_tp or hit_sl:
+                pnl = open_trade["lot"] * (
+                    (price - open_trade["entry"]) if open_trade["type"] == "BUY"
+                    else (open_trade["entry"] - price)
+                ) * 100
+                balance += pnl
+                trades.append({
+                    "type": open_trade["type"],
+                    "entry": open_trade["entry"],
+                    "exit": price,
+                    "pnl": round(pnl, 2),
+                    "result": "win" if pnl > 0 else "loss",
+                })
+                open_trade = None
+
+        # Open new trade if no open position
+        if not open_trade and signal in ("BUY", "SELL"):
+            rm = RiskManager(balance=balance, risk_per_trade=risk_per_trade)
+            lot = rm.calculate_lot_size(sl_pips=sl_pips)
+            sl_dist = sl_pips * pip_size
+            tp_dist = tp_pips * pip_size
+
+            open_trade = {
+                "type": signal,
+                "entry": price,
+                "lot": lot,
+                "sl": price - sl_dist if signal == "BUY" else price + sl_dist,
+                "tp": price + tp_dist if signal == "BUY" else price - tp_dist,
+            }
+
+    # Stats
+    total = len(trades)
+    wins = [t for t in trades if t["result"] == "win"]
+    losses = [t for t in trades if t["result"] == "loss"]
+    total_pnl = sum(t["pnl"] for t in trades)
+    winrate = round(len(wins) / total * 100, 2) if total > 0 else 0.0
+
+    gross_profit = sum(t["pnl"] for t in wins) if wins else 0
+    gross_loss = abs(sum(t["pnl"] for t in losses)) if losses else 1
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else 0.0
+
+    # Max drawdown
+    running = initial_balance
+    peak = initial_balance
+    max_dd = 0.0
+    for t in trades:
+        running += t["pnl"]
+        peak = max(peak, running)
+        dd = (peak - running) / peak * 100
+        max_dd = max(max_dd, dd)
+
+    return {
+        "total_trades": total,
+        "winning_trades": len(wins),
+        "losing_trades": len(losses),
+        "winrate_pct": winrate,
+        "total_pnl": round(total_pnl, 2),
+        "profit_factor": profit_factor,
+        "max_drawdown_pct": round(max_dd, 2),
+        "final_balance": round(balance, 2),
+        "return_pct": round((balance - initial_balance) / initial_balance * 100, 2),
+    }
