@@ -37,11 +37,20 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)):
-    return current_user
-
-
+@router.get("/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id":                current_user.id,
+        "email":             current_user.email,
+        "display_name":      current_user.display_name if hasattr(current_user, "display_name") else None,
+        "subscription_plan": current_user.subscription_plan if hasattr(current_user, "subscription_plan") and current_user.subscription_plan else "free",
+        "is_active":         current_user.is_active if hasattr(current_user, "is_active") else True,
+        "is_admin":          current_user.is_admin if hasattr(current_user, "is_admin") else False,
+        "is_verified":       current_user.is_verified if hasattr(current_user, "is_verified") else False,
+        "points_balance":    current_user.points_balance if hasattr(current_user, "points_balance") and current_user.points_balance is not None else 0,
+        "created_at":        current_user.created_at.isoformat() if hasattr(current_user, "created_at") and current_user.created_at else None,
+        "onboarded":         current_user.onboarded if hasattr(current_user, "onboarded") else False,
+    }
 class ChangePasswordPayload(BaseModel):
     current_password: str
     new_password: str
@@ -91,24 +100,3 @@ def save_notifications(
     return {"message": "Preferences saved"}
 
 
-@router.get("/me")
-def get_me(current_user: User = Depends(get_current_user)):
-    return {
-        "id":                current_user.id,
-        "email":             current_user.email,
-        "display_name":      getattr(current_user, "display_name", None),
-        "subscription_plan": getattr(current_user, "subscription_plan", "free"),
-        "is_active":         getattr(current_user, "is_active", True),
-        "is_admin":          getattr(current_user, "is_admin", False),
-        "is_verified":       getattr(current_user, "is_verified", False),
-        "points_balance":    getattr(current_user, "points_balance", 0),
-        "created_at":        current_user.created_at.isoformat() if hasattr(current_user, "created_at") and current_user.created_at else None,
-        "onboarded":         getattr(current_user, "onboarded", False),
-    }
-def complete_onboarding(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    current_user.onboarded = True
-    db.commit()
-    return {"status": "ok", "onboarded": True}
