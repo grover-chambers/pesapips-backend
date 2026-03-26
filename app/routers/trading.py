@@ -80,10 +80,53 @@ async def get_balance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # First check if user has an MT5 account
+    account = db.query(MT5Account).filter(
+        MT5Account.user_id == current_user.id,
+        MT5Account.is_active == True
+    ).first()
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="No MT5 account connected")
+    
+    # Check if agent is connected
+    if not manager.is_connected(current_user.id):
+        return {
+            "balance": 0,
+            "equity": 0,
+            "profit": 0,
+            "currency": "USD",
+            "server": account.server,
+            "login": account.account_number,
+            "agent_connected": False,
+            "message": "MT5 agent not connected. Please run the PesaPips EA on your computer."
+        }
+    
     result = await route_command(current_user.id, {"action": "BALANCE"})
+    
     if result.get("status") == "error":
-        raise HTTPException(status_code=503, detail=result["message"])
-    return result
+        return {
+            "balance": 0,
+            "equity": 0,
+            "profit": 0,
+            "currency": "USD",
+            "server": account.server,
+            "login": account.account_number,
+            "agent_connected": manager.is_connected(current_user.id),
+            "error": result.get("message")
+        }
+    
+    # Standardize the response format for frontend
+    standardized = {
+        "balance": float(result.get("balance", 0)),
+        "equity": float(result.get("equity", result.get("balance", 0))),
+        "profit": float(result.get("profit", 0)),
+        "currency": result.get("currency", "USD"),
+        "server": result.get("server", account.server),
+        "login": result.get("login", account.account_number),
+        "agent_connected": True
+    }
+    return standardized
 
 # ── POSITIONS ─────────────────────────────────────────────────────────────────
 

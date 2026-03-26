@@ -335,6 +335,32 @@ def redeem_points(
     }
 
 
+@router.get("/lessons/{lesson_id}/quizzes")
+def get_lesson_quizzes_admin(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Check if user has access (admin only for this endpoint)
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    quizzes = db.query(CourseQuiz).filter(
+        CourseQuiz.lesson_id == lesson_id
+    ).order_by(CourseQuiz.order).all()
+    
+    # Return full quiz data including correct_answer for admin
+    return [{
+        "id": q.id,
+        "question": q.question,
+        "options": q.options,
+        "correct_answer": q.correct_answer,
+        "explanation": q.explanation,
+        "points_awarded": q.points_awarded,
+        "order": q.order,
+    } for q in quizzes]
+
+
 # ── ADMIN ENDPOINTS ───────────────────────────────────────────────────────────
 
 def require_admin(current_user: User = Depends(get_current_user)):
