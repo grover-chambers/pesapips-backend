@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import axios from "axios"
 
-const api = axios.create({ baseURL: "http://localhost:8000" })
+const api = axios.create({ baseURL: "https://pesapips-backend.onrender.com" })
 api.interceptors.request.use(cfg => {
   const token = localStorage.getItem("pp_token")
   if (token) cfg.headers.Authorization = `Bearer ${token}`
@@ -1145,6 +1145,73 @@ function CourseManagement() {
     load()
   }
 
+  const [selectedLesson, setSelectedLesson] = useState(null)
+  const [showQuizModal, setShowQuizModal] = useState(false)
+  const [editingQuiz, setEditingQuiz] = useState(null)
+  const [quizForm, setQuizForm] = useState({
+    question: "",
+    options: ["", "", "", ""],
+    correct_answer: 0,
+    explanation: "",
+    points_awarded: 10,
+    order: 0
+  })
+  const [lessonQuizzes, setLessonQuizzes] = useState([])
+  
+  const loadQuizzes = async (lessonId) => {
+    try {
+      const res = await api.get(`/courses/lessons/${lessonId}/quizzes`)
+      setLessonQuizzes(res.data || [])
+    } catch (err) {
+      console.error("Failed to load quizzes:", err)
+      setLessonQuizzes([])
+    }
+  }
+
+  const saveQuiz = async (lessonId) => {
+    try {
+      if (editingQuiz.new) {
+        // Create new quiz
+        await api.post(`/courses/admin/lessons/${lessonId}/quizzes`, quizForm)
+        showToast("Quiz created successfully")
+      } else {
+        // Update existing quiz
+        await api.patch(`/courses/admin/quizzes/${editingQuiz.id}`, quizForm)
+        showToast("Quiz updated successfully")
+      }
+      // Reload quizzes and close modal
+      await loadQuizzes(lessonId)
+      setEditingQuiz(null)
+      // Reset form
+      setQuizForm({
+        question: "",
+        options: ["", "", "", ""],
+        correct_answer: 0,
+        explanation: "",
+        points_awarded: 10,
+        order: 0
+      })
+    } catch (err) {
+      console.error("Failed to save quiz:", err)
+      showToast(err.response?.data?.detail || "Failed to save quiz")
+    }
+  }
+
+  const deleteQuiz = async (quizId) => {
+    if (!window.confirm("Are you sure you want to delete this quiz?")) return
+    try {
+      await api.delete(`/courses/admin/quizzes/${quizId}`)
+      showToast("Quiz deleted successfully")
+      // Reload quizzes
+      if (selectedLesson) {
+        await loadQuizzes(selectedLesson.id)
+      }
+    } catch (err) {
+      console.error("Failed to delete quiz:", err)
+      showToast(err.response?.data?.detail || "Failed to delete quiz")
+    }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 20, justifyContent: "space-between", alignItems: "center" }}>
@@ -1193,35 +1260,42 @@ function CourseManagement() {
         </div>
       ) : (
         // Manage view
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {modules.map(m => (
-            <div key={m.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontFamily: C.sans, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>{m.title}</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <Badge label={m.track.toUpperCase()} color={m.track === "basics" ? C.green : C.gold} dim={m.track === "basics" ? C.greenDim : C.goldDim} />
-                    <Badge label={`${m.lesson_count} lessons`} color={C.text3} dim="rgba(90,96,112,0.1)" />
-                    <Badge label={m.is_published ? "LIVE" : "DRAFT"} color={m.is_published ? C.green : C.text3} dim={m.is_published ? C.greenDim : "rgba(90,96,112,0.1)"} />
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setShowLes(m.id)}
-                    style={{ ...btnOutline, padding: "5px 12px", fontSize: 10 }}>+ Lesson</button>
-                  <button onClick={() => togglePublish(m.id, m.is_published)}
-                    style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${m.is_published ? C.orange + "40" : C.green + "40"}`, background: "transparent", color: m.is_published ? C.orange : C.green, fontFamily: C.mono, fontSize: 10, cursor: "pointer" }}>
-                    {m.is_published ? "Unpublish" : "Publish"}
-                  </button>
-                  <button onClick={() => deleteModule(m.id)}
-                    style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.red}30`, background: "transparent", color: C.red, fontFamily: C.mono, fontSize: 10, cursor: "pointer" }}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div 
+          key={l.id} 
+          onClick={() => setSelectedLesson(l)}
+          style={{ 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center", 
+            padding: "8px 12px", 
+            background: C.surface2, 
+            borderRadius: 7,
+            cursor: "pointer",
+            transition: "all 0.15s"
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = C.surface}
+          onMouseLeave={e => e.currentTarget.style.background = C.surface2}
+        >
+          <span style={{ fontFamily: C.sans, fontSize: 12, color: C.text2 }}>{l.title}</span>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {l.quiz_count > 0 && (
+              <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold }}>
+                {l.quiz_count} quiz{l.quiz_count !== 1 ? "zes" : ""}
+              </span>
+            )}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedLesson(l)
+                setShowQuizModal(true)
+                loadQuizzes(l.id)
+              }}
+              style={{ ...btnOutline, padding: "2px 8px", fontSize: 9 }}
+            >
+              Manage Quizzes
+            </button>
+          </div>
         </div>
-      )}
 
       {/* New module modal */}
       {showMod && (
@@ -1285,9 +1359,177 @@ function CourseManagement() {
           </div>
         </Modal>
       )}
+       
+      {/* Quiz Management Modal */}
+      {showQuizModal && selectedLesson && (
+        <Modal
+          title={`Quizzes for: ${selectedLesson.title}`} 
+          onClose={() => {
+            setShowQuizModal(false)
+            setSelectedLesson(null)
+            setLessonQuizzes([])
+            setEditingQuiz(null)
+          }}
+          width={800}
+        >
+          {/* Add Quiz Button */}
+          <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontFamily: C.sans, fontSize: 14, color: C.text, margin: 0 }}>
+              {lessonQuizzes.length} Quiz{lessonQuizzes.length !== 1 ? "zes" : ""}
+            </h3>
+            <button 
+              onClick={() => setEditingQuiz({ lesson_id: selectedLesson.id, new: true })}
+              style={btnGold}
+            >
+              + Add Quiz
+            </button>
+          </div>
+         
+          {/* List of Quizzes */}
+          {lessonQuizzes.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
+              No quizzes yet. Click "Add Quiz" to create one.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {lessonQuizzes.map((q, idx) => (
+                <div key={q.id} style={{ background: C.surface2, borderRadius: 8, padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: C.sans, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+                        Q{idx + 1}: {q.question}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                        {q.options.map((opt, optIdx) => (
+                          <span 
+                            key={optIdx}
+                            style={{
+                              fontFamily: C.mono, 
+                              fontSize: 10, 
+                              padding: "2px 6px", 
+                              borderRadius: 4,
+                              background: optIdx === q.correct_answer ? C.greenDim : "transparent",
+                              color: optIdx === q.correct_answer ? C.green : C.text3,
+                              border: `1px solid ${optIdx === q.correct_answer ? C.green : C.border2}`
+                            }}
+                          >
+                            {String.fromCharCode(65 + optIdx)}: {opt}
+                          </span>
+                        ))}
+                      </div>
+                      {q.explanation && (
+                        <div style={{ fontFamily: C.sans, fontSize: 10, color: C.text3, marginTop: 4 }}>
+                          📝 {q.explanation}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button 
+                        onClick={() => setEditingQuiz(q)}
+                        style={{ ...btnOutline, padding: "4px 8px", fontSize: 9 }}
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => deleteQuiz(q.id)}
+                        style={{ ...btnOutline, padding: "4px 8px", fontSize: 9, color: C.red, borderColor: `${C.red}40` }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Edit/Create Quiz Modal */}
+      {editingQuiz && (
+        <Modal 
+          title={editingQuiz.new ? "Create Quiz" : "Edit Quiz"} 
+          onClose={() => setEditingQuiz(null)}
+          width={700}
+        >
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>QUESTION</div>
+            <textarea 
+              value={quizForm.question} 
+              onChange={e => setQuizForm(p => ({...p, question: e.target.value}))}
+              rows={3}
+              style={inputStyle}
+              placeholder="What is the main indicator for trend following?"
+            />
+          </div>
+          
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>OPTIONS (A, B, C, D)</div>
+            {quizForm.options.map((opt, idx) => (
+              <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 30, fontFamily: C.mono, fontSize: 12, color: C.text2, paddingTop: 8 }}>
+                  {String.fromCharCode(65 + idx)}:
+                </span>
+                <input 
+                  value={opt}
+                  onChange={e => {
+                    const newOpts = [...quizForm.options]
+                    newOpts[idx] = e.target.value
+                    setQuizForm(p => ({...p, options: newOpts}))
+                  }}
+                  style={{ flex: 1, ...inputStyle }}
+                  placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                />
+              </div>
+            ))}
+          </div>
+         
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>CORRECT ANSWER</div>
+              <select 
+                value={quizForm.correct_answer} 
+                onChange={e => setQuizForm(p => ({...p, correct_answer: parseInt(e.target.value)}))}
+                style={inputStyle}
+              >
+                {quizForm.options.map((_, idx) => (
+                  <option key={idx} value={idx}>{String.fromCharCode(65 + idx)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>POINTS AWARDED</div>
+              <input 
+                type="number"
+                value={quizForm.points_awarded}
+                onChange={e => setQuizForm(p => ({...p, points_awarded: parseInt(e.target.value)}))}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+          
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>EXPLANATION (optional)</div>
+            <textarea 
+              value={quizForm.explanation}
+              onChange={e => setQuizForm(p => ({...p, explanation: e.target.value}))}
+              rows={2}
+              style={inputStyle}
+              placeholder="Explain why this answer is correct..."
+            />
+          </div>
+          
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button onClick={() => setEditingQuiz(null)} style={btnOutline}>Cancel</button>
+            <button onClick={() => saveQuiz(selectedLesson.id)} style={btnGold}>
+              {editingQuiz.new ? "Create Quiz" : "Save Changes"}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {toast && <div style={{ position: "fixed", bottom: 24, right: 24, background: C.gold, color: "#000", padding: "12px 20px", fontFamily: C.mono, fontSize: 11, borderRadius: 8, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
-    </div>
+    </div>    
   )
 }
 
