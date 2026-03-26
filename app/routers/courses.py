@@ -497,3 +497,42 @@ def admin_delete_quiz(
     if not q: raise HTTPException(status_code=404, detail="Not found")
     db.delete(q); db.commit()
     return {"deleted": True}
+
+@router.get("/admin/stats")
+def admin_course_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Check if user is admin
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get all modules with lesson stats
+    modules = db.query(CourseModule).all()
+    
+    result = []
+    for m in modules:
+        lessons = db.query(CourseLesson).filter(CourseLesson.module_id == m.id).all()
+        lesson_data = []
+        for l in lessons:
+            completions = db.query(UserProgress).filter(
+                UserProgress.lesson_id == l.id,
+                UserProgress.completed == True
+            ).count()
+            lesson_data.append({
+                "id": l.id,
+                "title": l.title,
+                "quiz_count": len(l.quizzes),
+                "completions": completions
+            })
+        result.append({
+            "id": m.id,
+            "title": m.title,
+            "track": m.track,
+            "tier_required": m.tier_required,
+            "is_published": m.is_published,
+            "lesson_count": len(lessons),
+            "lessons": lesson_data
+        })
+    
+    return result

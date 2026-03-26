@@ -87,7 +87,14 @@ async def get_balance(
     ).first()
     
     if not account:
-        raise HTTPException(status_code=404, detail="No MT5 account connected")
+        return {
+            "balance": 0,
+            "equity": 0,
+            "profit": 0,
+            "currency": "USD",
+            "agent_connected": False,
+            "message": "No MT5 account connected. Please connect your MT5 account first."
+        }
     
     # Check if agent is connected
     if not manager.is_connected(current_user.id):
