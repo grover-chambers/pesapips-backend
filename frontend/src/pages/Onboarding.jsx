@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import axios from "axios"
 
-const BASE = "http://localhost:8000"
+const BASE = "https://pesapips-backend.onrender.com"
 
 function getToken() {
   return localStorage.getItem("pp_token") || ""

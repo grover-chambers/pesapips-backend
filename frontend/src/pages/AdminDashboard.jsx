@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react"
 import axios from "axios"
 import QuizManager from "../components/QuizManager";
 
-const api = axios.create({ baseURL: "http://localhost:8000" })
+const api = axios.create({ baseURL: "https://pesapips-backend.onrender.com" })
 api.interceptors.request.use(cfg => {
   const token = localStorage.getItem("pp_token")
   if (token) cfg.headers.Authorization = `Bearer ${token}`
@@ -1094,15 +1094,23 @@ function Announcements() {
 
 // ── COURSE MANAGEMENT ─────────────────────────────────────────────────────────
 function CourseManagement() {
-  const [modules, setModules] = useState([])
-  const [stats,   setStats]   = useState([])
-  const [view,    setView]    = useState("stats") // stats | manage
-  const [loading, setLoading] = useState(true)
-  const [showMod, setShowMod] = useState(false)
-  const [showLes, setShowLes] = useState(null)
-  const [modForm, setModForm] = useState({ title: "", description: "", track: "basics", tier_required: "free", order: 0, is_published: true })
-  const [lesForm, setLesForm] = useState({ title: "", content: "", duration: "", order: 0, is_published: true })
-  const [toast,   setToast]   = useState("")
+  const [modules,     setModules]     = useState([])
+  const [stats,       setStats]       = useState([])
+  const [view,        setView]        = useState("stats")
+  const [loading,     setLoading]     = useState(true)
+  const [showMod,     setShowMod]     = useState(false)
+  const [showLes,     setShowLes]     = useState(null)
+  const [editLesson,  setEditLesson]  = useState(null)
+  const [expandedMod, setExpandedMod] = useState({})
+  const [expandedLes, setExpandedLes] = useState({})
+  const [lessonQuizzes, setLessonQuizzes] = useState({})
+  const [quizLoading, setQuizLoading] = useState({})
+  const [showQuiz,    setShowQuiz]    = useState(null)
+  const [editQuiz,    setEditQuiz]    = useState(null)
+  const [modForm,     setModForm]     = useState({ title: "", description: "", track: "basics", tier_required: "free", order: 0, is_published: true })
+  const [lesForm,     setLesForm]     = useState({ title: "", content: "", duration: "", order: 0, is_published: true })
+  const [quizForm,    setQuizForm]    = useState({ question: "", options: ["","","",""], correct_answer: 0, explanation: "", points_awarded: 10, order: 0 })
+  const [toast,       setToast]       = useState("")
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 3000) }
 
@@ -1126,13 +1134,6 @@ function CourseManagement() {
     load()
   }
 
-  const createLesson = async () => {
-    await api.post(`/courses/admin/modules/${showLes}/lessons`, lesForm)
-    setShowLes(null)
-    showToast("Lesson added")
-    load()
-  }
-
   const togglePublish = async (id, is_published) => {
     await api.patch(`/courses/admin/modules/${id}`, { is_published: !is_published })
     showToast(is_published ? "Module unpublished" : "Module published")
@@ -1146,54 +1147,186 @@ function CourseManagement() {
     load()
   }
 
+  const toggleModule = (id) => setExpandedMod(p => ({ ...p, [id]: !p[id] }))
+
+  const createLesson = async () => {
+    await api.post(`/courses/admin/modules/${showLes}/lessons`, lesForm)
+    setShowLes(null)
+    setLesForm({ title: "", content: "", duration: "", order: 0, is_published: true })
+    showToast("Lesson added")
+    load()
+  }
+
+  const saveLesson = async () => {
+    await api.patch(`/courses/admin/lessons/${editLesson.id}`, {
+      title: lesForm.title, content: lesForm.content,
+      duration: lesForm.duration, order: lesForm.order,
+      is_published: lesForm.is_published,
+    })
+    setEditLesson(null)
+    showToast("Lesson updated")
+    load()
+  }
+
+  const deleteLesson = async (id) => {
+    if (!window.confirm("Delete this lesson and its quizzes?")) return
+    await api.delete(`/courses/admin/lessons/${id}`)
+    showToast("Lesson deleted")
+    load()
+  }
+
+  const openEditLesson = (l) => {
+    setLesForm({ title: l.title, content: l.content || "", duration: l.duration || "", order: l.order || 0, is_published: l.is_published })
+    setEditLesson(l)
+  }
+
+  const loadQuizzes = async (lessonId) => {
+    if (lessonQuizzes[lessonId]) return
+    setQuizLoading(p => ({ ...p, [lessonId]: true }))
+    try {
+      const r = await api.get(`/courses/lessons/${lessonId}/quizzes`)
+      setLessonQuizzes(p => ({ ...p, [lessonId]: r.data }))
+    } catch { setLessonQuizzes(p => ({ ...p, [lessonId]: [] })) }
+    setQuizLoading(p => ({ ...p, [lessonId]: false }))
+  }
+
+  const toggleLesson = (lessonId) => {
+    setExpandedLes(p => {
+      const next = { ...p, [lessonId]: !p[lessonId] }
+      if (next[lessonId]) loadQuizzes(lessonId)
+      return next
+    })
+  }
+
+  const openNewQuiz = (lessonId) => {
+    setQuizForm({ question: "", options: ["","","",""], correct_answer: 0, explanation: "", points_awarded: 10, order: 0 })
+    setShowQuiz(lessonId)
+    setEditQuiz(null)
+  }
+
+  const openEditQuiz = (q) => {
+    const opts = Array.isArray(q.options) ? [...q.options] : ["","","",""]
+    while (opts.length < 4) opts.push("")
+    setQuizForm({ question: q.question, options: opts, correct_answer: q.correct_answer, explanation: q.explanation || "", points_awarded: q.points_awarded || 10, order: q.order || 0 })
+    setEditQuiz(q)
+    setShowQuiz(null)
+  }
+
+  const saveQuiz = async (lessonId) => {
+    const payload = { ...quizForm, options: quizForm.options.filter(o => o.trim() !== "") }
+    if (editQuiz) {
+      await api.patch(`/courses/admin/quizzes/${editQuiz.id}`, payload)
+      showToast("Quiz updated")
+    } else {
+      await api.post(`/courses/admin/lessons/${lessonId}/quizzes`, payload)
+      showToast("Quiz added")
+    }
+    setLessonQuizzes(p => ({ ...p, [lessonId]: undefined }))
+    await loadQuizzes(lessonId)
+    setShowQuiz(null)
+    setEditQuiz(null)
+  }
+
+  const deleteQuiz = async (quizId, lessonId) => {
+    if (!window.confirm("Delete this quiz question?")) return
+    await api.delete(`/courses/admin/quizzes/${quizId}`)
+    setLessonQuizzes(p => ({ ...p, [lessonId]: undefined }))
+    await loadQuizzes(lessonId)
+    showToast("Quiz deleted")
+  }
+
+  const updateOption = (idx, val) => setQuizForm(p => {
+    const opts = [...p.options]; opts[idx] = val; return { ...p, options: opts }
+  })
+
+  const OPTION_LABELS = ["A", "B", "C", "D"]
+
+  const QuizFormPanel = ({ lessonId, onClose }) => (
+    <div style={{ background: "#1e2230", border: "1px solid rgba(212,168,67,0.3)", borderRadius: 10, padding: "18px 20px", marginTop: 10 }}>
+      <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#d4a843", letterSpacing: "0.12em", marginBottom: 14 }}>
+        {editQuiz ? "EDIT QUIZ QUESTION" : "NEW QUIZ QUESTION"}
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 6 }}>QUESTION</div>
+        <textarea value={quizForm.question} onChange={e => setQuizForm(p => ({...p, question: e.target.value}))}
+          rows={2} style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 6 }}>OPTIONS — click letter to set correct answer</div>
+        {quizForm.options.map((opt, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7 }}>
+            <button onClick={() => setQuizForm(p => ({...p, correct_answer: i}))}
+              style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${quizForm.correct_answer === i ? "#3dd68c" : "rgba(255,255,255,0.1)"}`, background: quizForm.correct_answer === i ? "rgba(61,214,140,0.1)" : "transparent", color: quizForm.correct_answer === i ? "#3dd68c" : "#5a6070", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+              {OPTION_LABELS[i]}
+            </button>
+            <input value={opt} onChange={e => updateOption(i, e.target.value)}
+              placeholder={`Option ${OPTION_LABELS[i]}`}
+              style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: `1px solid ${quizForm.correct_answer === i ? "rgba(61,214,140,0.4)" : "rgba(255,255,255,0.1)"}`, borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: 10, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 6 }}>EXPLANATION (optional)</div>
+          <input value={quizForm.explanation} onChange={e => setQuizForm(p => ({...p, explanation: e.target.value}))}
+            style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
+        </div>
+        <div>
+          <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 6 }}>POINTS</div>
+          <input type="number" value={quizForm.points_awarded} onChange={e => setQuizForm(p => ({...p, points_awarded: parseInt(e.target.value)}))}
+            style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
+        </div>
+        <div>
+          <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 6 }}>ORDER</div>
+          <input type="number" value={quizForm.order} onChange={e => setQuizForm(p => ({...p, order: parseInt(e.target.value)}))}
+            style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={{ padding: "9px 18px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#9a9eb0", cursor: "pointer" }}>Cancel</button>
+        <button onClick={() => saveQuiz(lessonId)} style={{ padding: "9px 18px", background: "#d4a843", border: "none", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, letterSpacing: "0.1em", color: "#000", fontWeight: 600, cursor: "pointer" }}>{editQuiz ? "Save changes" : "Add question"}</button>
+      </div>
+    </div>
+  )
+
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 20, justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", gap: 8 }}>
           {["stats","manage"].map(v => (
             <button key={v} onClick={() => setView(v)}
-              style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${view === v ? C.gold : C.border2}`, background: view === v ? C.goldDim : "transparent", color: view === v ? C.gold : C.text3, fontFamily: C.mono, fontSize: 9, letterSpacing: "0.1em", cursor: "pointer" }}>
+              style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${view === v ? "#d4a843" : "rgba(255,255,255,0.1)"}`, background: view === v ? "rgba(212,168,67,0.1)" : "transparent", color: view === v ? "#d4a843" : "#5a6070", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, letterSpacing: "0.1em", cursor: "pointer" }}>
               {v.toUpperCase()}
             </button>
           ))}
         </div>
-        <button onClick={() => setShowMod(true)} style={btnGold}>+ New module</button>
+        <button onClick={() => setShowMod(true)} style={{ padding: "9px 18px", background: "#d4a843", border: "none", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, letterSpacing: "0.1em", color: "#000", fontWeight: 600, cursor: "pointer" }}>+ New module</button>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: C.text3, fontFamily: C.mono, fontSize: 12 }}>Loading...</div>
+        <div style={{ textAlign: "center", padding: 40, color: "#5a6070", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 12 }}>Loading...</div>
       ) : view === "stats" ? (
-        // Stats view
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {stats.map(m => (
-            <div key={m.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 20px" }}>
+            <div key={m.id} style={{ background: "#111318", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "18px 20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
-                  <div style={{ fontFamily: C.sans, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>{m.title}</div>
+                  <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 14, fontWeight: 600, color: "#e8e8ec", marginBottom: 4 }}>{m.title}</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Badge label={m.track.toUpperCase()} color={m.track === "basics" ? C.green : C.gold} dim={m.track === "basics" ? C.greenDim : C.goldDim} />
-                    <Badge label={m.tier_required.toUpperCase()} color={PLAN_COLOR[m.tier_required] || C.text3} dim={`${PLAN_COLOR[m.tier_required] || C.text3}15`} />
-                    {!m.is_published && <Badge label="DRAFT" color={C.text3} dim="rgba(90,96,112,0.1)" />}
+                    <Badge label={m.track.toUpperCase()} color={m.track === "basics" ? "#3dd68c" : "#d4a843"} dim={m.track === "basics" ? "rgba(61,214,140,0.1)" : "rgba(212,168,67,0.1)"} />
+                    <Badge label={m.tier_required.toUpperCase()} color={PLAN_COLOR[m.tier_required] || "#5a6070"} dim={`${PLAN_COLOR[m.tier_required] || "#5a6070"}15`} />
+                    {!m.is_published && <Badge label="DRAFT" color="#5a6070" dim="rgba(90,96,112,0.1)" />}
                   </div>
                 </div>
-                <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>{m.lesson_count} lessons</div>
+                <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#5a6070" }}>{m.lesson_count} lessons</div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {m.lessons?.map(l => (
-                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: C.surface2, borderRadius: 7 }}>
-                    <span style={{ fontFamily: C.sans, fontSize: 12, color: C.text2 }}>{l.title}</span>
+                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#181b22", borderRadius: 7 }}>
+                    <span style={{ fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 12, color: "#9a9eb0" }}>{l.title}</span>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      {l.quiz_count > 0 && <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold }}>{l.quiz_count} quiz</span>}
-                      <button 
-                        onClick={() => {
-                          setSelectedLesson(l);
-                          setShowQuizModal(true);
-                        }}
-                        style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #d4a84340", background: "transparent", color: "#d4a843", fontSize: 9, cursor: "pointer" }}
-                      >
-                        Manage Quizzes
-                      </button>
-                      <span style={{ fontFamily: C.mono, fontSize: 10, color: C.green }}>{l.completions} completions</span>
+                      {l.quiz_count > 0 && <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#d4a843" }}>{l.quiz_count} quiz</span>}
+                      <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#3dd68c" }}>{l.completions} completions</span>
                     </div>
                   </div>
                 ))}
@@ -1202,118 +1335,195 @@ function CourseManagement() {
           ))}
         </div>
       ) : (
-        // Manage view
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {modules.map(m => (
-            <div key={m.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontFamily: C.sans, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>{m.title}</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <Badge label={m.track.toUpperCase()} color={m.track === "basics" ? C.green : C.gold} dim={m.track === "basics" ? C.greenDim : C.goldDim} />
-                    <Badge label={`${m.lesson_count} lessons`} color={C.text3} dim="rgba(90,96,112,0.1)" />
-                    <Badge label={m.is_published ? "LIVE" : "DRAFT"} color={m.is_published ? C.green : C.text3} dim={m.is_published ? C.greenDim : "rgba(90,96,112,0.1)"} />
+            <div key={m.id} style={{ background: "#111318", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", flex: 1 }} onClick={() => toggleModule(m.id)}>
+                  <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#5a6070", display: "inline-block", transform: expandedMod[m.id] ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▶</span>
+                  <div>
+                    <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 14, fontWeight: 600, color: "#e8e8ec", marginBottom: 4 }}>{m.title}</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <Badge label={m.track.toUpperCase()} color={m.track === "basics" ? "#3dd68c" : "#d4a843"} dim={m.track === "basics" ? "rgba(61,214,140,0.1)" : "rgba(212,168,67,0.1)"} />
+                      <Badge label={`${m.lesson_count || 0} lessons`} color="#5a6070" dim="rgba(90,96,112,0.1)" />
+                      <Badge label={m.is_published ? "LIVE" : "DRAFT"} color={m.is_published ? "#3dd68c" : "#5a6070"} dim={m.is_published ? "rgba(61,214,140,0.1)" : "rgba(90,96,112,0.1)"} />
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setShowLes(m.id)}
-                    style={{ ...btnOutline, padding: "5px 12px", fontSize: 10 }}>+ Lesson</button>
+                  <button onClick={() => { setShowLes(m.id); setLesForm({ title: "", content: "", duration: "", order: 0, is_published: true }) }}
+                    style={{ padding: "5px 12px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#9a9eb0", cursor: "pointer" }}>+ Lesson</button>
                   <button onClick={() => togglePublish(m.id, m.is_published)}
-                    style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${m.is_published ? C.orange + "40" : C.green + "40"}`, background: "transparent", color: m.is_published ? C.orange : C.green, fontFamily: C.mono, fontSize: 10, cursor: "pointer" }}>
+                    style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${m.is_published ? "rgba(240,147,79,0.4)" : "rgba(61,214,140,0.4)"}`, background: "transparent", color: m.is_published ? "#f0934f" : "#3dd68c", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, cursor: "pointer" }}>
                     {m.is_published ? "Unpublish" : "Publish"}
                   </button>
                   <button onClick={() => deleteModule(m.id)}
-                    style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.red}30`, background: "transparent", color: C.red, fontFamily: C.mono, fontSize: 10, cursor: "pointer" }}>
+                    style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(240,79,90,0.3)", background: "transparent", color: "#f04f5a", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, cursor: "pointer" }}>
                     Delete
                   </button>
                 </div>
               </div>
+
+              {expandedMod[m.id] && (
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "#181b22" }}>
+                  {(!m.lessons || m.lessons.length === 0) ? (
+                    <div style={{ padding: "16px 24px", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#5a6070" }}>No lessons yet — click + Lesson above</div>
+                  ) : m.lessons.map((l, li) => (
+                    <div key={l.id} style={{ borderBottom: li < m.lessons.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 24px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }} onClick={() => toggleLesson(l.id)}>
+                          <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#5a6070", display: "inline-block", transform: expandedLes[l.id] ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▶</span>
+                          <div>
+                            <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec" }}>{l.title}</div>
+                            <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
+                              {l.duration && <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070" }}>⏱ {l.duration}</span>}
+                              <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: l.is_published ? "#3dd68c" : "#5a6070" }}>{l.is_published ? "LIVE" : "DRAFT"}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => openEditLesson(l)}
+                            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#9a9eb0", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, cursor: "pointer" }}>Edit</button>
+                          <button onClick={() => { openNewQuiz(l.id); if (!expandedLes[l.id]) toggleLesson(l.id) }}
+                            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid rgba(212,168,67,0.4)", background: "transparent", color: "#d4a843", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, cursor: "pointer" }}>+ Quiz</button>
+                          <button onClick={() => deleteLesson(l.id)}
+                            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid rgba(240,79,90,0.3)", background: "transparent", color: "#f04f5a", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, cursor: "pointer" }}>Delete</button>
+                        </div>
+                      </div>
+
+                      {expandedLes[l.id] && (
+                        <div style={{ padding: "0 24px 16px 48px" }}>
+                          {showQuiz === l.id && !editQuiz && <QuizFormPanel lessonId={l.id} onClose={() => setShowQuiz(null)} />}
+                          {editQuiz && lessonQuizzes[l.id]?.find(q => q.id === editQuiz.id) && <QuizFormPanel lessonId={l.id} onClose={() => setEditQuiz(null)} />}
+                          {quizLoading[l.id] ? (
+                            <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#5a6070", padding: "10px 0" }}>Loading quizzes...</div>
+                          ) : (lessonQuizzes[l.id] || []).length === 0 && showQuiz !== l.id ? (
+                            <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#5a6070", padding: "10px 0" }}>No quiz questions yet — click + Quiz above</div>
+                          ) : (lessonQuizzes[l.id] || []).map((q, qi) => (
+                            <div key={q.id} style={{ background: "#111318", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: "12px 14px", marginTop: 8 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                                <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 12, color: "#e8e8ec", fontWeight: 600, flex: 1, marginRight: 12 }}>Q{qi + 1}. {q.question}</div>
+                                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                  <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#d4a843" }}>{q.points_awarded}pts</span>
+                                  <button onClick={() => openEditQuiz(q)}
+                                    style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#9a9eb0", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, cursor: "pointer" }}>Edit</button>
+                                  <button onClick={() => deleteQuiz(q.id, l.id)}
+                                    style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(240,79,90,0.3)", background: "transparent", color: "#f04f5a", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, cursor: "pointer" }}>Delete</button>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                {(Array.isArray(q.options) ? q.options : []).map((opt, oi) => (
+                                  <div key={oi} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, fontWeight: 700, color: q.correct_answer === oi ? "#3dd68c" : "#5a6070", width: 16 }}>{["A","B","C","D"][oi]}</span>
+                                    <span style={{ fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 12, color: q.correct_answer === oi ? "#3dd68c" : "#9a9eb0" }}>{opt}</span>
+                                    {q.correct_answer === oi && <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 8, color: "#3dd68c" }}>✓ CORRECT</span>}
+                                  </div>
+                                ))}
+                              </div>
+                              {q.explanation && (
+                                <div style={{ marginTop: 8, padding: "6px 10px", background: "#181b22", borderRadius: 6, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 11, color: "#5a6070", fontStyle: "italic" }}>💡 {q.explanation}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* New module modal */}
       {showMod && (
         <Modal title="Create Module" onClose={() => setShowMod(false)}>
           {[["TITLE","title"],["DESCRIPTION","description"]].map(([label, key]) => (
             <div key={key} style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>{label}</div>
+              <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 7 }}>{label}</div>
               <input value={modForm[key]} onChange={e => setModForm(p => ({...p, [key]: e.target.value}))}
-                style={inputStyle}
-                onFocus={e => e.target.style.borderColor = C.gold}
-                onBlur={e => e.target.style.borderColor = C.border2} />
+                style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
             </div>
           ))}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 80px", gap: 12, marginBottom: 20 }}>
             {[["TRACK","track",["basics","coursework"]], ["TIER","tier_required",["free","pro","elite"]]].map(([label, key, opts]) => (
               <div key={key}>
-                <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>{label}</div>
-                <select value={modForm[key]} onChange={e => setModForm(p => ({...p, [key]: e.target.value}))} style={inputStyle}>
+                <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 7 }}>{label}</div>
+                <select value={modForm[key]} onChange={e => setModForm(p => ({...p, [key]: e.target.value}))}
+                  style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }}>
                   {opts.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
             ))}
             <div>
-              <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>ORDER</div>
+              <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 7 }}>ORDER</div>
               <input type="number" value={modForm.order} onChange={e => setModForm(p => ({...p, order: parseInt(e.target.value)}))}
-                style={inputStyle}
-                onFocus={e => e.target.style.borderColor = C.gold}
-                onBlur={e => e.target.style.borderColor = C.border2} />
+                style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button onClick={() => setShowMod(false)} style={btnOutline}>Cancel</button>
-            <button onClick={createModule} style={btnGold}>Create</button>
+            <button onClick={() => setShowMod(false)} style={{ padding: "9px 18px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#9a9eb0", cursor: "pointer" }}>Cancel</button>
+            <button onClick={createModule} style={{ padding: "9px 18px", background: "#d4a843", border: "none", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#000", fontWeight: 600, cursor: "pointer" }}>Create</button>
           </div>
         </Modal>
       )}
 
-      {showQuizModal && selectedLesson && (
-        <QuizManager 
-          lesson={selectedLesson}
-          onClose={() => {
-            setShowQuizModal(false);
-            setSelectedLesson(null);
-          }}
-          api={api}
-          showToast={showToast}
-        />
-      )}
-
-      {/* New lesson modal */}
       {showLes && (
         <Modal title="Add Lesson" onClose={() => setShowLes(null)} width={640}>
           {[["TITLE","title"],["DURATION","duration"],["CONTENT (Markdown)","content"]].map(([label, key]) => (
             <div key={key} style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 7 }}>{label}</div>
+              <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 7 }}>{label}</div>
               {key === "content" ? (
                 <textarea value={lesForm[key]} onChange={e => setLesForm(p => ({...p, [key]: e.target.value}))}
-                  rows={8} style={{ ...inputStyle, resize: "vertical", fontFamily: C.mono, fontSize: 12 }}
-                  onFocus={e => e.target.style.borderColor = C.gold}
-                  onBlur={e => e.target.style.borderColor = C.border2} />
+                  rows={8} style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: "#e8e8ec", outline: "none", boxSizing: "border-box", resize: "vertical" }} />
               ) : (
                 <input value={lesForm[key]} onChange={e => setLesForm(p => ({...p, [key]: e.target.value}))}
                   placeholder={key === "duration" ? "e.g. 5 min" : ""}
-                  style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = C.gold}
-                  onBlur={e => e.target.style.borderColor = C.border2} />
+                  style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
               )}
             </div>
           ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <input type="checkbox" checked={lesForm.is_published} onChange={e => setLesForm(p => ({...p, is_published: e.target.checked}))} id="les_pub" />
+            <label htmlFor="les_pub" style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#5a6070", cursor: "pointer" }}>Publish immediately</label>
+          </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button onClick={() => setShowLes(null)} style={btnOutline}>Cancel</button>
-            <button onClick={createLesson} style={btnGold}>Add lesson</button>
+            <button onClick={() => setShowLes(null)} style={{ padding: "9px 18px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#9a9eb0", cursor: "pointer" }}>Cancel</button>
+            <button onClick={createLesson} style={{ padding: "9px 18px", background: "#d4a843", border: "none", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#000", fontWeight: 600, cursor: "pointer" }}>Add lesson</button>
           </div>
         </Modal>
       )}
 
-      {toast && <div style={{ position: "fixed", bottom: 24, right: 24, background: C.gold, color: "#000", padding: "12px 20px", fontFamily: C.mono, fontSize: 11, borderRadius: 8, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
+      {editLesson && (
+        <Modal title={`Edit — ${editLesson.title}`} onClose={() => setEditLesson(null)} width={640}>
+          {[["TITLE","title"],["DURATION","duration"],["CONTENT (Markdown)","content"]].map(([label, key]) => (
+            <div key={key} style={{ marginBottom: 14 }}>
+              <div style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 9, color: "#5a6070", marginBottom: 7 }}>{label}</div>
+              {key === "content" ? (
+                <textarea value={lesForm[key]} onChange={e => setLesForm(p => ({...p, [key]: e.target.value}))}
+                  rows={8} style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: "#e8e8ec", outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+              ) : (
+                <input value={lesForm[key]} onChange={e => setLesForm(p => ({...p, [key]: e.target.value}))}
+                  placeholder={key === "duration" ? "e.g. 5 min" : ""}
+                  style={{ width: "100%", padding: "9px 12px", background: "#181b22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'Inter','Segoe UI',sans-serif", fontSize: 13, color: "#e8e8ec", outline: "none", boxSizing: "border-box" }} />
+              )}
+            </div>
+          ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <input type="checkbox" checked={lesForm.is_published} onChange={e => setLesForm(p => ({...p, is_published: e.target.checked}))} id="les_edit_pub" />
+            <label htmlFor="les_edit_pub" style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#5a6070", cursor: "pointer" }}>Published</label>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button onClick={() => setEditLesson(null)} style={{ padding: "9px 18px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#9a9eb0", cursor: "pointer" }}>Cancel</button>
+            <button onClick={saveLesson} style={{ padding: "9px 18px", background: "#d4a843", border: "none", borderRadius: 8, fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#000", fontWeight: 600, cursor: "pointer" }}>Save changes</button>
+          </div>
+        </Modal>
+      )}
+
+      {toast && <div style={{ position: "fixed", bottom: 24, right: 24, background: "#d4a843", color: "#000", padding: "12px 20px", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, borderRadius: 8, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
     </div>
   )
 }
-
-
 // ── STRATEGY LIBRARY ─────────────────────────────────────────────────────────
 function StrategyLibrary() {
   const [strategies, setStrategies] = useState([])

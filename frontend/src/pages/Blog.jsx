@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import axios from "axios"
 
-const BASE = "http://localhost:8000"
+const BASE = "https://pesapips-backend.onrender.com"
 const C = {
   bg:"#171a20", surface:"#1f2330", surface2:"#262c3a",
   border:"rgba(255,255,255,0.07)", border2:"rgba(255,255,255,0.12)",

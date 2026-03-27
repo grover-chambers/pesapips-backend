@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import axios from "axios"
 
-const API = "http://localhost:8000"
+const API = "https://pesapips-backend.onrender.com"
 
 const C = {
   bg:       "#171a20",
