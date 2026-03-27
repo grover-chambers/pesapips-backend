@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
 import axios from "axios"
-import QuizManager from "../components/QuizManager";
 
 const api = axios.create({ baseURL: "https://pesapips-backend.onrender.com" })
 api.interceptors.request.use(cfg => {
@@ -1103,6 +1102,8 @@ function CourseManagement() {
   const [editLesson,  setEditLesson]  = useState(null)
   const [expandedMod, setExpandedMod] = useState({})
   const [expandedLes, setExpandedLes] = useState({})
+  const [moduleLessons, setModuleLessons] = useState({})
+  const [modLesLoading, setModLesLoading] = useState({})
   const [lessonQuizzes, setLessonQuizzes] = useState({})
   const [quizLoading, setQuizLoading] = useState({})
   const [showQuiz,    setShowQuiz]    = useState(null)
@@ -1147,13 +1148,30 @@ function CourseManagement() {
     load()
   }
 
-  const toggleModule = (id) => setExpandedMod(p => ({ ...p, [id]: !p[id] }))
+  const toggleModule = async (id) => {
+    setExpandedMod(p => ({ ...p, [id]: !p[id] }))
+    if (!moduleLessons[id]) {
+      setModLesLoading(p => ({ ...p, [id]: true }))
+      try {
+        const r = await api.get(`/courses/admin/modules`)
+        // fetch lessons for this specific module
+        const lesR = await api.get(`/courses/${id}/lessons`)
+        setModuleLessons(p => ({ ...p, [id]: lesR.data }))
+      } catch { setModuleLessons(p => ({ ...p, [id]: [] })) }
+      setModLesLoading(p => ({ ...p, [id]: false }))
+    }
+  }
 
   const createLesson = async () => {
     await api.post(`/courses/admin/modules/${showLes}/lessons`, lesForm)
     setShowLes(null)
     setLesForm({ title: "", content: "", duration: "", order: 0, is_published: true })
     showToast("Lesson added")
+    // Refresh lessons for this module
+    try {
+      const lesR = await api.get(`/courses/${showLes}/lessons`)
+      setModuleLessons(p => ({ ...p, [showLes]: lesR.data }))
+    } catch {}
     load()
   }
 
@@ -1366,10 +1384,12 @@ function CourseManagement() {
 
               {expandedMod[m.id] && (
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "#181b22" }}>
-                  {(!m.lessons || m.lessons.length === 0) ? (
+                  {modLesLoading[m.id] ? (
+                    <div style={{ padding: "16px 24px", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#5a6070" }}>Loading lessons...</div>
+                  ) : (!moduleLessons[m.id] || moduleLessons[m.id].length === 0) ? (
                     <div style={{ padding: "16px 24px", fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 11, color: "#5a6070" }}>No lessons yet — click + Lesson above</div>
-                  ) : m.lessons.map((l, li) => (
-                    <div key={l.id} style={{ borderBottom: li < m.lessons.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                  ) : moduleLessons[m.id].map((l, li) => (
+                    <div key={l.id} style={{ borderBottom: li < moduleLessons[m.id].length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 24px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }} onClick={() => toggleLesson(l.id)}>
                           <span style={{ fontFamily: "'JetBrains Mono','Fira Mono',monospace", fontSize: 10, color: "#5a6070", display: "inline-block", transform: expandedLes[l.id] ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▶</span>
