@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -15,6 +15,9 @@ class MT5Account(Base):
     broker_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_connected = Column(Boolean, default=False)
+    last_balance = Column(Float, nullable=True)   # last known account balance
+    last_equity  = Column(Float, nullable=True)   # last known account equity
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="mt5_accounts")

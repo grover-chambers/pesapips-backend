@@ -72,10 +72,7 @@ async def _run_loop(user_id: int):
                 await asyncio.sleep(POLL_INTERVAL)
                 continue
 
-            # ── Market hours gate ────────────────────────────────────────────
-            market_open, market_reason = is_market_open(asset)
             if not market_open:
-                _log(user_id, f"Market closed: {market_reason} — waiting")
                 await asyncio.sleep(300)  # check every 5 min when closed
                 continue
 
@@ -104,6 +101,13 @@ async def _run_loop(user_id: int):
             params = active_us.custom_params or {}
             asset  = active_us.asset or "XAUUSD"
             tf     = params.get("timeframe", "M5")
+
+            # ── Market hours gate ─────────────────────────────────────────────
+            market_open, market_reason = is_market_open(asset)
+            if not market_open:
+                _log(user_id, f"Market closed: {market_reason} — waiting")
+                await asyncio.sleep(300)
+                continue
 
             # ── Check for existing open position on this asset ─────────────────
             positions_res = await route_command(user_id, {"action": "POSITIONS"})
@@ -140,7 +144,7 @@ async def _run_loop(user_id: int):
             # Build unified trade context
             ctx = build_context(
                 symbol=asset, timeframe=tf,
-                strategy_id=user_strat.strategy_id,
+                strategy_id=active_us.strategy_id,
                 strategy_name=params.get("strategy_name", ""),
                 price=current_price, market_open=market_open,
             )
@@ -236,7 +240,7 @@ async def _run_loop(user_id: int):
                         notif = Notification(
                             user_id = user_id,
                             type    = "signal",
-                            title   = f"{'📈' if sig=='BUY' else '📉'} Trade placed: {sig} {asset}",
+                            title   = f"{'📈' if signal=='BUY' else '📉'} Trade placed: {signal} {asset}",
                             message = f"Lot: {volume} | {ctx.signal_reason[:100]} | Regime: {ctx.regime} ({ctx.regime_confidence}%) | Fit: {ctx.strategy_fit}",
                             read    = False,
                         )

@@ -230,7 +230,7 @@ def detect_regime(df: pd.DataFrame, params: dict = None) -> Dict[str, Any]:
         same_alignment = (r_ema9 > r_ema21) == (ema9 > ema21)
         if abs(r_adx - adx) < 8 and abs(r_rsi - rsi) < 10 and same_alignment:
             # What happened next?
-            future = df.iloc[-(i-1)]["close"] if i > 1 else df.iloc[-1]["close"]
+            future = df.iloc[-i]["close"]  # one candle forward from matched row
             moved_up = float(future) > r_close
             similar_cases.append(moved_up)
         if len(similar_cases) >= 20:

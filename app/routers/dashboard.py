@@ -11,37 +11,52 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-
 @router.get("/summary", response_model=DashboardSummary)
 def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     trades = db.query(Trade).filter(Trade.user_id == current_user.id).all()
-
     total = len(trades)
-    wins = [t for t in trades if t.profit > 0]
-    losses = [t for t in trades if t.profit <= 0]
-    daily_pnl = sum(t.profit for t in trades)
-    winrate = (len(wins) / total * 100) if total > 0 else 0.0
+    wins      = [t for t in trades if t.profit and t.profit > 0]
+    losses    = [t for t in trades if t.profit and t.profit <= 0]
+    daily_pnl = sum(t.profit for t in trades if t.profit)
+    winrate   = (len(wins) / total * 100) if total > 0 else 0.0
 
     active_strategy = db.query(UserStrategy).filter(
         UserStrategy.user_id == current_user.id,
         UserStrategy.is_active == True,
     ).first()
 
+    # Pull last known balance from MT5 account
+    from app.models.mt5_account import MT5Account
+    mt5_acct = db.query(MT5Account).filter(
+        MT5Account.user_id == current_user.id,
+        MT5Account.is_active == True,
+    ).first()
+    balance = float(mt5_acct.last_balance) if mt5_acct and mt5_acct.last_balance else 0.0
+    equity  = float(mt5_acct.last_equity)  if mt5_acct and mt5_acct.last_equity  else balance
+
+    # Max drawdown from trade history
+    running, peak, max_dd = balance, balance, 0.0
+    for t in sorted(trades, key=lambda x: x.opened_at or 0):
+        if t.profit:
+            running += t.profit
+            peak    = max(peak, running)
+            dd      = (peak - running) / peak * 100 if peak > 0 else 0
+            max_dd  = max(max_dd, dd)
+
     return DashboardSummary(
-        balance=0.0,
-        equity=0.0,
+        balance=round(balance, 2),
+        equity=round(equity, 2),
         daily_pnl=round(daily_pnl, 2),
         total_trades=total,
         winning_trades=len(wins),
         losing_trades=len(losses),
         winrate=round(winrate, 2),
-        max_drawdown=0.0,
+        max_drawdown=round(max_dd, 2),
         active_strategy=active_strategy.strategy.name if active_strategy else None,
     )
-
 
 @router.get("/trades", response_model=List[TradeOut])
 def get_trades(

@@ -1,6 +1,7 @@
 from app.workers.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.strategy import UserStrategy
+from app.models.mt5_account import MT5Account
 from app.services.signal_engine import run_signal
 from app.services.risk_manager import RiskManager
 from app.services.market_data import get_market_data
@@ -54,8 +55,14 @@ def run_trading_loop():
 
                 # Log trade to DB if signal is BUY or SELL
                 if signal in ("BUY", "SELL"):
+                    # Get real balance from MT5 account
+                    mt5_acct = db.query(MT5Account).filter(
+                        MT5Account.user_id == us.user_id,
+                        MT5Account.is_active == True,
+                    ).first()
+                    real_balance = float(mt5_acct.last_balance) if mt5_acct and mt5_acct.last_balance else 1000.0
                     rm = RiskManager(
-                        balance=1000.0,  # placeholder until MT5 balance is live
+                        balance=real_balance,
                         risk_per_trade=params.get("risk_per_trade", 1.0),
                     )
                     lot = rm.calculate_lot_size(sl_pips=params.get("sl_pips", 15))

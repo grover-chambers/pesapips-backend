@@ -4476,7 +4476,10 @@ function LearningHub() {
     try {
       const r = await api.post("/courses/quiz/submit", { lesson_id: activeLesson.id, quiz_id: quizId, answer })
       setQuizResults(p => ({ ...p, [quizId]: r.data }))
-      if (r.data.correct) showToast(`Correct! +${r.data.points_earned} points`)
+      if (r.data.correct) {
+        showToast(`Correct! +${r.data.points_earned} points`)
+        setSummary(p => p ? { ...p, points_balance: r.data.total_points } : p)
+      }
       else showToast("Incorrect — check the explanation below")
     } catch {}
   }
