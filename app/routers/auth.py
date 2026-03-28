@@ -6,7 +6,6 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut, UserLogin, Token
 from app.dependencies import get_current_user
-from app.core.email import send_welcome_email
 from app.core.email import email_welcome, email_password_reset
 from app.models.password_reset import PasswordResetToken
 from datetime import datetime, timedelta
