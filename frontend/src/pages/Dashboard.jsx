@@ -6515,6 +6515,16 @@ function Dashboard() {
   const [showMail,  setShowMail]  = useState(false)
   const [messages,  setMessages]  = useState([])
   const [unreadMail,setUnreadMail]= useState(0)
+  const [topMt5Status, setTopMt5Status] = useState(null)
+
+  useEffect(() => {
+    const fetchTopMt5 = () => {
+      api.get("/trading/status").then(r => setTopMt5Status(r.data)).catch(() => setTopMt5Status({ agent_connected: false }))
+    }
+    fetchTopMt5()
+    const id = setInterval(fetchTopMt5, 10000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     const t = localStorage.getItem("pp_token")
@@ -6714,7 +6724,7 @@ function Dashboard() {
                 { label: "API",            status: "operational" },
                 { label: "Signal Engine",  status: "operational" },
                 { label: "Market Data",    status: "operational" },
-                { label: "MT5 Bridge",     status: "pending"     },
+                { label: "MT5 Bridge",     status: topMt5Status?.agent_connected ? "operational" : topMt5Status === null ? "pending" : "offline" },
                 { label: "Calendar",       status: "operational" },
                 { label: "News Feed",      status: "operational" },
               ].map(s => {
