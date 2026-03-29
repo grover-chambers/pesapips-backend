@@ -2799,7 +2799,7 @@ function MT5Connect() {
             {[
               ["01", "Download the EA file below"],
               ["02", "In MT5: File → Open Data Folder → MQL5 → Experts"],
-              ["03", "Copy PesaPipsEA.mq5 into the Experts folder"],
+              ["03", "Copy PesaPipsEA.ex5 into MT5 → MQL5 → Experts folder (Windows: no compilation needed)"],
               ["04", "Restart MT5, drag EA onto any chart, enable Allow DLL imports"],
               ["05", "Return here and add your account below"],
             ].map(([n, s]) => (
@@ -2833,8 +2833,25 @@ function MT5Connect() {
         </div>
         {/* Download button */}
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <a href="/PesaPipsEA.mq5" download style={{ padding: "10px 22px", borderRadius: 8, background: C.gold, color: "#000", fontFamily: C.mono, fontSize: 11, fontWeight: 700, textDecoration: "none", letterSpacing: "0.06em" }}>
-            ⬇ Download PesaPipsEA.mq5
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <a href="/PesaPipsEA.ex5" download style={{ padding: "10px 22px", borderRadius: 8, background: C.gold, color: "#000", fontFamily: C.mono, fontSize: 11, fontWeight: 700, textDecoration: "none", letterSpacing: "0.06em" }}>
+              ⬇ Download PesaPipsEA.ex5
+            </a>
+            <a href="/PesaPipsEA.mq5" download style={{ padding: "10px 22px", borderRadius: 8, background: "transparent", color: C.gold, fontFamily: C.mono, fontSize: 11, fontWeight: 700, textDecoration: "none", letterSpacing: "0.06em", border: `1px solid ${C.gold}` }}>
+              ⬇ Source PesaPipsEA.mq5
+            </a>
+            <a href="/pesapips_agent.py" download style={{ padding: "10px 22px", borderRadius: 8, background: "transparent", color: C.blue, fontFamily: C.mono, fontSize: 11, fontWeight: 700, textDecoration: "none", letterSpacing: "0.06em", border: `1px solid ${C.blue}` }}>
+              ⬇ Download Agent (Python)
+            </a>
+          </div>
+          <div style={{ fontFamily: C.sans, fontSize: 12, color: C.text3, marginTop: 8 }}>
+            💡 <strong style={{ color: C.text }}>Windows users:</strong> Use the .ex5 file — no compilation needed. Drag it into MT5 Experts folder and attach to any chart.<br/>
+            💡 <strong style={{ color: C.text }}>Linux/Mac users:</strong> Use the .mq5 source and compile inside MT5 via Wine.
+          </div>
+          <div style={{ fontFamily: C.sans, fontSize: 12, color: C.text3, marginTop: 8 }}>
+            Then run the agent: <code style={{ background: C.surface3, padding: "2px 6px", borderRadius: 4, color: C.gold }}>python3 pesapips_agent.py --token YOUR_TOKEN --user-id YOUR_ID</code>
+          </div>
+          <div style={{ display: "none" }}>⬇ Download PesaPipsEA.mq5
           </a>
           <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>Compatible with MT5 build 3000+</span>
         </div>
