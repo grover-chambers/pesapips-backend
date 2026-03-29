@@ -4,13 +4,27 @@ from app.services.signal_engine import run_signal
 from app.services.market_data import get_market_data, get_market_watch
 from app.models.user import User
 from app.dependencies import get_current_user
+from datetime import datetime, timezone
+import pandas as pd
 import time
 
 router = APIRouter(prefix="/market", tags=["Market"])
 
-_calendar_cache   = {"data": [], "fetched_at": 0}
-_news_cache       = {"data": [], "fetched_at": 0}
+_calendar_cache    = {"data": [], "fetched_at": 0}
+_news_cache        = {"data": [], "fetched_at": 0}
 _marketwatch_cache = {"data": [], "fetched_at": 0}
+
+
+def _is_market_closed() -> bool:
+    """Forex market closed: Saturday all day, Sunday all day, Friday after 22:00 UTC."""
+    now     = datetime.now(timezone.utc)
+    weekday = now.weekday()  # 0=Mon … 6=Sun
+    hour    = now.hour
+    return (
+        weekday == 5 or                    # Saturday
+        weekday == 6 or                    # Sunday
+        (weekday == 4 and hour >= 22)      # Friday after 22:00 UTC
+    )
 
 
 @router.get("/calendar")
@@ -50,10 +64,6 @@ def market_watch_prices(
     force: bool = Query(False),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Returns real-time prices + sparklines for all tracked assets from Yahoo Finance.
-    Cached for 60 seconds.
-    """
     now = time.time()
     if force or now - _marketwatch_cache["fetched_at"] > 30:
         _marketwatch_cache["data"] = get_market_watch()
@@ -102,22 +112,61 @@ def market_scan(current_user: User = Depends(get_current_user)):
 def get_candles(
     symbol: str,
     timeframe: str = Query("M5"),
-    periods: int   = Query(60),
+    periods:   int = Query(80),
     current_user: User = Depends(get_current_user),
 ):
-    df = get_market_data(symbol=symbol, timeframe=timeframe, periods=periods)
-    if df is None or df.empty:
-        return {"symbol": symbol, "candles": [], "source": "none"}
+    """
+    Returns OHLCV candles. Tries MT5 first, falls back to Yahoo Finance.
+    Always returns market_closed and cached_at so the frontend can show
+    accurate status instead of stale 'last data' warnings.
+    """
+    from app.routers.signal import get_candles as _get_candles
 
-    source = "yahoo_finance"
+    market_closed = _is_market_closed()
+    now_ts        = int(datetime.now(timezone.utc).timestamp())
+
+    df = _get_candles(symbol=symbol, timeframe=timeframe, periods=periods)
+
+    if df is None or df.empty:
+        return {
+            "symbol":        symbol,
+            "timeframe":     timeframe,
+            "candles":       [],
+            "source":        "none",
+            "market_closed": market_closed,
+            "cached_at":     now_ts,
+        }
+
     candles = []
     for ts, row in df.iterrows():
+        try:
+            unix = int(pd.Timestamp(ts).timestamp())
+        except Exception:
+            unix = now_ts
         candles.append({
-            "time":   ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+            "time":   unix,
             "open":   round(float(row["open"]),  5),
             "high":   round(float(row["high"]),  5),
             "low":    round(float(row["low"]),   5),
             "close":  round(float(row["close"]), 5),
-            "volume": int(row["volume"]),
+            "volume": int(row.get("volume", 0)),
         })
-    return {"symbol": symbol, "timeframe": timeframe, "candles": candles, "source": source}
+
+    last_ts = candles[-1]["time"] if candles else now_ts
+
+    return {
+        "symbol":        symbol,
+        "timeframe":     timeframe,
+        "candles":       candles,
+        "source":        "mt5" if _is_mt5_source(df) else "yahoo_finance",
+        "market_closed": market_closed,
+        "cached_at":     last_ts,
+    }
+
+
+def _is_mt5_source(df) -> bool:
+    """Check if df came from MT5 by looking at index timezone awareness."""
+    try:
+        return df.index.tzinfo is not None
+    except Exception:
+        return False

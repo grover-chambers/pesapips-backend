@@ -1692,13 +1692,13 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
     setLoading(true)
     try {
       const asset    = selectedAsset || "XAUUSD"
-      const timeframe = activeStrat?.custom_params?.timeframe || tf
+      const timeframe = tf
       const periods  = 200
 
       // Fetch candles
-      const candleRes = await api.get(`/trading/candles/${asset}?timeframe=${timeframe}&periods=${periods}`)
+      const candleRes = await api.get(`/market/candles/${asset}?timeframe=${timeframe}&periods=${periods}`)
       setMarketClosed(candleRes.data?.market_closed || false)
-      if (candleRes.data?.cached_at) setCachedAt(new Date(candleRes.data.cached_at * 1000).toLocaleDateString())
+      if (candleRes.data?.cached_at) setCachedAt(new Date(candleRes.data.cached_at * 1000).toLocaleString('en-KE', { dateStyle:'short', timeStyle:'short' }))
       const candles   = (candleRes.data?.candles || []).map(c => ({
         time:  c.time,
         open:  c.open,
@@ -1798,6 +1798,22 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
                      background: "transparent", color: C.text3, fontFamily: C.mono, fontSize: 9,
                      cursor: "pointer", opacity: loading ? 0.5 : 1 }}>
             {loading ? "..." : "↺ Refresh"}
+          </button>
+          <button
+            onClick={() => {
+              const TF_TV = { M1:"1", M5:"5", M15:"15", M30:"30", H1:"60", H4:"240", D1:"D" }
+              const tvInterval = TF_TV[tf] || "5"
+              const sym = selectedAsset || "XAUUSD"
+              window.open(
+                `https://www.tradingview.com/chart/?symbol=${sym}&interval=${tvInterval}&theme=dark`,
+                "_blank"
+              )
+            }}
+            title="Open full chart with indicators & drawing tools"
+            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.gold}50`,
+                     background: C.goldDim, color: C.gold, fontFamily: C.mono, fontSize: 9,
+                     cursor: "pointer", letterSpacing: "0.05em", fontWeight: 600 }}>
+            ⛶ Full Screen
           </button>
           {lastUpdate && (
             <span style={{ fontFamily: C.mono, fontSize: 9, color: C.text3 }}>
