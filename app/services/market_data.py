@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
-import yfinance as yf
 
 TWELVE_KEY = os.getenv("TWELVE_DATA_KEY", "")
 
@@ -69,8 +68,6 @@ TIMEFRAME_MAP = {
     "H4":  ("3mo", "1h"),
     "D1":  ("1y",  "1d"),
 }
-
-INDIVIDUAL_FETCH = {"XAUUSD","XAGUSD","BTCUSD","USDKES","DXY","EURUSD","AUDUSD","NASDAQ","DOW"}
 
 
 # ── Twelve Data ───────────────────────────────────────────────────────────────
@@ -200,31 +197,16 @@ def get_market_data(
     timeframe: str = "M5",
     periods: int = 200,
 ) -> Optional[pd.DataFrame]:
-    """Twelve Data first, Yahoo fallback, synthetic last resort."""
+    """Twelve Data first, synthetic last resort. Yahoo removed — unreliable."""
     df = _twelve_candles(symbol, timeframe, periods)
     if df is not None and not df.empty:
         return df
-    df = _yahoo_candles(symbol, timeframe, periods)
-    if df is not None and not df.empty:
-        return df
-    print(f"[market_data] both sources failed for {symbol}, using synthetic")
+    print(f"[market_data] Twelve Data failed for {symbol}, using synthetic")
     return _synthetic(periods=periods)
 
 
 def get_current_price(symbol: str) -> Optional[float]:
-    price = _twelve_price(symbol)
-    if price:
-        return price
-    try:
-        ticker = YAHOO_MAP.get(symbol, symbol)
-        t = yf.Ticker(ticker)
-        info = t.fast_info
-        p = getattr(info, "last_price", None)
-        if p:
-            return float(p)
-    except Exception as e:
-        print(f"[market_data] price fetch failed for {symbol}: {e}")
-    return None
+    return _twelve_price(symbol)
 
 
 def get_market_watch() -> list:
@@ -258,21 +240,7 @@ def get_market_watch() -> list:
             price = twelve_prices.get(sym)
 
             if not price:
-                # Fallback: individual Yahoo fetch
-                ticker = YAHOO_MAP.get(sym, sym)
-                df = yf.download(ticker, period="1d", interval="5m",
-                                 progress=False, auto_adjust=True)
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = df.columns.get_level_values(0)
-                df.columns = [c.lower() for c in df.columns]
-                df = df.dropna(subset=["close"])
-                if df.empty:
-                    raise ValueError("empty")
-                price  = float(df["close"].iloc[-1])
-                open24 = float(df["close"].iloc[0])
-                chg_pct = ((price - open24) / open24 * 100) if open24 else 0
-                chg_abs = price - open24
-                sparkline = df["close"].tail(20).tolist()
+                raise ValueError(f"No Twelve Data price for {sym}")
             else:
                 # Get sparkline from Twelve Data candles (last 20 x 5min)
                 spark_df = _twelve_candles(sym, "M5", 20)

@@ -481,29 +481,12 @@ function TickerBar() {
   }
 
   useEffect(() => {
-    // First call — use cached data (fast)
-    seedFromWatch(false)
-    // Second call after 3s — force fresh prices
-    const quickId = setTimeout(() => seedFromWatch(true), 3000)
-    // Re-seed every 90s
-    const seedId = setInterval(() => seedFromWatch(true), 90000)
-    return () => { clearTimeout(quickId); clearInterval(seedId) }
+    // Single fetch on mount only — no auto-refresh
+    seedFromWatch(true)
+    return () => {}
   }, [])
 
-  // Animate micro-movements always (base prices animate too while waiting)
-  useEffect(() => {
-    animRef.current = setInterval(() => {
-      setPrices(prev => {
-        const next = { ...prev }
-        Object.keys(next).forEach(s => {
-          const delta = next[s].price * next[s].vol * (Math.random() - 0.49)
-          next[s] = { ...next[s], price: next[s].price + delta }
-        })
-        return next
-      })
-    }, 2000)
-    return () => clearInterval(animRef.current)
-  }, [])
+  // No fake animation — prices come from real API only
 
   const items = ready ? Object.entries(prices) : []
 
@@ -1835,7 +1818,7 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
             onClick={() => {
               const TF_TV = { M1:"1", M5:"5", M15:"15", M30:"30", H1:"60", H4:"240", D1:"D" }
               const tvInterval = TF_TV[tf] || "5"
-              const sym = selectedAsset || "XAUUSD"
+              const sym = chartAsset || "XAUUSD"
               window.open(
                 `https://www.tradingview.com/chart/?symbol=${sym}&interval=${tvInterval}&theme=dark`,
                 "_blank"
