@@ -2366,16 +2366,47 @@ function Overview({ user, summary, setActiveSection }) {
       .catch(() => {})
   }, [selectedAsset])
 
-  // Fetch MT5 live data
+  // Fetch MT5 live data — priority on load, retry fast until connected
   useEffect(() => {
-    const fetchMT5 = () => {
-      api.get("/trading/status").then(r => setMt5Status(r.data)).catch(() => {})
-      api.get("/trading/balance").then(r => setMt5Balance(r.data)).catch(() => {})
-      api.get("/trading/positions").then(r => setLivePositions(r.data?.positions || [])).catch(() => {})
+    let retryCount = 0
+    let intervalId = null
+
+    const fetchMT5 = async () => {
+      try {
+        const [statusRes, balanceRes, posRes] = await Promise.allSettled([
+          api.get("/trading/status"),
+          api.get("/trading/balance"),
+          api.get("/trading/positions"),
+        ])
+        if (statusRes.status  === "fulfilled") setMt5Status(statusRes.value.data)
+        if (balanceRes.status === "fulfilled") setMt5Balance(balanceRes.value.data)
+        if (posRes.status     === "fulfilled") setLivePositions(posRes.value.data?.positions || [])
+
+        const connected = statusRes.value?.data?.connected
+        if (connected) {
+          // Connected — slow down to normal 15s polling
+          clearInterval(intervalId)
+          intervalId = setInterval(fetchMT5, 15000)
+        } else if (retryCount < 5) {
+          // Not connected yet — retry every 3s for first 5 attempts
+          retryCount++
+          clearInterval(intervalId)
+          intervalId = setInterval(fetchMT5, 3000)
+        } else {
+          // Give up fast retries — settle to 30s
+          clearInterval(intervalId)
+          intervalId = setInterval(fetchMT5, 30000)
+        }
+      } catch {
+        retryCount++
+      }
     }
+
+    // Fire immediately on mount
     fetchMT5()
-    const id = setInterval(fetchMT5, 15000)
-    return () => clearInterval(id)
+    // Start with fast retry interval
+    intervalId = setInterval(fetchMT5, 3000)
+    return () => clearInterval(intervalId)
   }, [])
 
   useEffect(() => {
