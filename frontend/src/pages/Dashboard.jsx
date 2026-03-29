@@ -2851,9 +2851,7 @@ function MT5Connect() {
           <div style={{ fontFamily: C.sans, fontSize: 12, color: C.text3, marginTop: 8 }}>
             Then run the agent: <code style={{ background: C.surface3, padding: "2px 6px", borderRadius: 4, color: C.gold }}>python3 pesapips_agent.py --token YOUR_TOKEN --user-id YOUR_ID</code>
           </div>
-          <div style={{ display: "none" }}>⬇ Download PesaPipsEA.mq5
-          </a>
-          <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>Compatible with MT5 build 3000+</span>
+          <div style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>Compatible with MT5 build 3000+</div>
         </div>
       </div>
 
