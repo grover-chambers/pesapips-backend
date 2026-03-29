@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
     SMTP_FROM: str = "PesaPips <noreply@pesapips.com>"
+    # Market Data
+    TWELVE_DATA_KEY: Optional[str] = ""
 
     class Config:
         env_file = ".env"

@@ -114,8 +114,9 @@ class MT5FileClient:
             content = self.hbt_file.read_text().strip()
             if not content.startswith("ready|"):
                 return False
-            ts = int(content.split("|")[1])
-            return (time.time() - ts) < 10  # EA updates every 200ms
+            # Use file modification time — avoids MT5 broker time vs system clock mismatch
+            mtime = self.hbt_file.stat().st_mtime
+            return (time.time() - mtime) < 10
         except:
             return False
 
