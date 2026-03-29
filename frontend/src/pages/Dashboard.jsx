@@ -1644,6 +1644,24 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
   const [cachedAt,    setCachedAt]    = useState(null)
 
   const TF_OPTIONS = ["M1","M5","M15","M30","H1","H4"]
+  const WATCHED_ASSETS = [
+    { label: "XAU/USD", value: "XAUUSD" },
+    { label: "XAG/USD", value: "XAGUSD" },
+    { label: "EUR/USD", value: "EURUSD" },
+    { label: "GBP/USD", value: "GBPUSD" },
+    { label: "USD/JPY", value: "USDJPY" },
+    { label: "BTC/USD", value: "BTCUSD" },
+    { label: "ETH/USD", value: "ETHUSD" },
+    { label: "USD/CHF", value: "USDCHF" },
+    { label: "AUD/USD", value: "AUDUSD" },
+    { label: "WTI OIL", value: "OIL"    },
+    { label: "NASDAQ",  value: "NASDAQ" },
+    { label: "DOW",     value: "DOW"    },
+    { label: "S&P 500", value: "SPX"    },
+    { label: "DXY",     value: "DXY"    },
+    { label: "USD/KES", value: "USDKES" },
+  ]
+  const [chartAsset, setChartAsset] = useState("XAUUSD")
 
   // Load lightweight-charts dynamically
   useEffect(() => {
@@ -1691,7 +1709,7 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
     if (!candleSeries.current) return
     setLoading(true)
     try {
-      const asset    = selectedAsset || "XAUUSD"
+      const asset    = chartAsset
       const timeframe = tf
       const periods  = 200
 
@@ -1749,7 +1767,7 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
     fetchData()
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
-  }, [chartReady, activeStrat?.id, selectedAsset, tf])
+  }, [chartReady, activeStrat?.id, chartAsset, tf])
 
   const sigColor = signal?.signal === "BUY" ? C.green
                  : signal?.signal === "SELL" ? C.red : C.text3
@@ -1765,7 +1783,7 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: loading ? C.gold : C.green,
                         boxShadow: `0 0 6px ${loading ? C.gold : C.green}`, animation: loading ? "pulse 1s infinite" : "none" }} />
           <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 600, letterSpacing: "0.08em" }}>
-            LIVE CHART — {selectedAsset || "XAUUSD"}
+            LIVE CHART — {chartAsset}
           </span>
           {activeStrat && (
             <span style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, padding: "2px 8px",
@@ -1781,6 +1799,20 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Asset dropdown */}
+          <select
+            value={chartAsset}
+            onChange={e => setChartAsset(e.target.value)}
+            style={{
+              background: "#1f2330", border: "1px solid rgba(255,255,255,0.12)",
+              color: "#d4a843", fontFamily: "'DM Mono','Courier New',monospace",
+              fontSize: 10, borderRadius: 6, padding: "3px 8px",
+              cursor: "pointer", outline: "none", fontWeight: 600,
+            }}>
+            {WATCHED_ASSETS.map(a => (
+              <option key={a.value} value={a.value}>{a.label}</option>
+            ))}
+          </select>
           {/* TF selector */}
           <div style={{ display: "flex", gap: 3 }}>
             {TF_OPTIONS.map(t => (
