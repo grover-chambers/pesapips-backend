@@ -1872,7 +1872,7 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
             <div id="tv-chart-inline" style={{ width: "100%", height: "100%" }} />
             {/* PesaPips watermark — sits on top of the iframe */}
             <div style={{
-              position: "absolute", bottom: 48, left: 16,
+              position: "absolute", bottom: 52, right: 80,
               display: "flex", alignItems: "center", gap: 8,
               pointerEvents: "none", zIndex: 10, opacity: 0.18,
             }}>
@@ -1898,7 +1898,7 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
               <div id="tv-chart-fullscreen" style={{ width: "100%", height: "100%" }} />
               {/* PesaPips watermark */}
               <div style={{
-                position: "absolute", bottom: 60, left: 20,
+                position: "absolute", bottom: 60, right: 90,
                 display: "flex", alignItems: "center", gap: 10,
                 pointerEvents: "none", zIndex: 10, opacity: 0.22,
               }}>
