@@ -1613,6 +1613,188 @@ function AutorunBar({ signal, activeStrat }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LIVE SIGNAL OVERLAY — candlestick chart + signal markers + confidence
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRADE OVERLAY — draws entry/SL/TP lines + R:R badge over TradingView widget
+// ─────────────────────────────────────────────────────────────────────────────
+function TradeOverlay({ positions, signal, chartAsset }) {
+  const canvasRef = useRef(null)
+
+  const draw = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    const W = canvas.width
+    const H = canvas.height
+    ctx.clearRect(0, 0, W, H)
+
+    // Filter positions for current asset
+    const assetPos = (positions || []).filter(p =>
+      p.symbol === chartAsset || p.asset === chartAsset
+    )
+
+    // Gather all prices to determine display range
+    const allPrices = []
+    assetPos.forEach(p => {
+      if (p.entry_price) allPrices.push(p.entry_price)
+      if (p.sl && p.sl > 0) allPrices.push(p.sl)
+      if (p.tp && p.tp > 0) allPrices.push(p.tp)
+    })
+    if (signal?.signal !== "HOLD" && signal?.latest_price) {
+      allPrices.push(signal.latest_price)
+      if (signal.sl > 0) allPrices.push(signal.latest_price - signal.sl)
+      if (signal.tp > 0) allPrices.push(signal.latest_price + signal.tp)
+    }
+    if (allPrices.length < 2) return
+
+    const pad = 40
+    const priceMin = Math.min(...allPrices) * 0.9998
+    const priceMax = Math.max(...allPrices) * 1.0002
+    const priceRange = priceMax - priceMin
+
+    const toY = price => pad + (1 - (price - priceMin) / priceRange) * (H - pad * 2)
+
+    const drawLine = (price, color, dash, label, labelRight = false) => {
+      const y = toY(price)
+      if (y < 0 || y > H) return
+      ctx.save()
+      ctx.strokeStyle = color
+      ctx.lineWidth = 1.5
+      ctx.globalAlpha = 0.85
+      ctx.setLineDash(dash)
+      ctx.beginPath()
+      ctx.moveTo(pad, y)
+      ctx.lineTo(W - pad, y)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Label box
+      const x = labelRight ? W - pad - 4 : pad + 4
+      const align = labelRight ? "right" : "left"
+      ctx.font = "bold 10px 'DM Mono', monospace"
+      ctx.textAlign = align
+      ctx.globalAlpha = 0.95
+      const text = `${label}: ${typeof price === "number" ? price.toFixed(price > 100 ? 2 : 5) : price}`
+      const metrics = ctx.measureText(text)
+      const bw = metrics.width + 10
+      const bx = labelRight ? W - pad - bw - 4 : pad + 4
+      ctx.fillStyle = color + "33"
+      ctx.fillRect(bx, y - 10, bw, 16)
+      ctx.fillStyle = color
+      ctx.fillText(text, labelRight ? W - pad - 8 : pad + 8, y + 2)
+      ctx.restore()
+    }
+
+    // Draw each open position
+    assetPos.forEach((pos, i) => {
+      const isBuy = pos.trade_type === "BUY"
+      const entryColor = isBuy ? "#3dd68c" : "#f06b6b"
+      const slColor = "#f06b6b"
+      const tpColor = "#3dd68c"
+
+      if (pos.entry_price) drawLine(pos.entry_price, entryColor, [6, 3], `${isBuy ? "BUY" : "SELL"} #${pos.id || i+1}`)
+      if (pos.sl && pos.sl > 0) drawLine(pos.sl, slColor, [3, 3], "SL", true)
+      if (pos.tp && pos.tp > 0) drawLine(pos.tp, tpColor, [3, 3], "TP", true)
+
+      // R:R badge
+      if (pos.sl > 0 && pos.tp > 0 && pos.entry_price) {
+        const risk   = Math.abs(pos.entry_price - pos.sl)
+        const reward = Math.abs(pos.tp - pos.entry_price)
+        const rr     = risk > 0 ? (reward / risk).toFixed(1) : "—"
+        const profit = pos.profit || 0
+        const profitColor = profit >= 0 ? "#3dd68c" : "#f06b6b"
+
+        const badgeX = W / 2 - 80
+        const badgeY = toY(pos.entry_price) - 30
+
+        ctx.save()
+        ctx.globalAlpha = 0.92
+        ctx.fillStyle = "#1f2330ee"
+        ctx.strokeStyle = entryColor + "60"
+        ctx.lineWidth = 1
+        roundRect(ctx, badgeX, badgeY, 160, 24, 6)
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.font = "bold 10px 'DM Mono', monospace"
+        ctx.fillStyle = "#d4a843"
+        ctx.textAlign = "center"
+        ctx.fillText(`R:R  1:${rr}`, badgeX + 60, badgeY + 15)
+
+        ctx.fillStyle = profitColor
+        ctx.fillText(`P/L $${profit.toFixed(2)}`, badgeX + 130, badgeY + 15)
+        ctx.restore()
+      }
+    })
+
+    // Draw pending signal lines (if no open position on this asset)
+    if (assetPos.length === 0 && signal?.signal !== "HOLD" && signal?.latest_price) {
+      const isBuy = signal.signal === "BUY"
+      const entryPrice = signal.latest_price
+      const slPrice    = isBuy ? entryPrice - (signal.sl || 0) : entryPrice + (signal.sl || 0)
+      const tpPrice    = isBuy ? entryPrice + (signal.tp || 0) : entryPrice - (signal.tp || 0)
+
+      drawLine(entryPrice, "#d4a843", [8, 4], `${signal.signal} SIGNAL`)
+      if (signal.sl > 0) drawLine(slPrice, "#f06b6b", [3, 3], "SL", true)
+      if (signal.tp > 0) drawLine(tpPrice, "#3dd68c", [3, 3], "TP", true)
+
+      // Confidence badge
+      const conf = Math.round((signal.confidence || 0) * 100)
+      const badgeX = W - 120
+      const badgeY = 12
+      ctx.save()
+      ctx.globalAlpha = 0.92
+      ctx.fillStyle = "#1f2330ee"
+      ctx.strokeStyle = "#d4a84360"
+      ctx.lineWidth = 1
+      roundRect(ctx, badgeX, badgeY, 106, 22, 5)
+      ctx.fill(); ctx.stroke()
+      ctx.font = "bold 10px 'DM Mono', monospace"
+      ctx.fillStyle = "#d4a843"
+      ctx.textAlign = "center"
+      ctx.fillText(`AI: ${signal.signal} ${conf}%`, badgeX + 53, badgeY + 14)
+      ctx.restore()
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.lineTo(x + w - r, y)
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+    ctx.lineTo(x + w, y + h - r)
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+    ctx.lineTo(x + r, y + h)
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+    ctx.lineTo(x, y + r)
+    ctx.quadraticCurveTo(x, y, x + r, y)
+    ctx.closePath()
+  }
+
+  useEffect(() => { draw() }, [positions, signal, chartAsset])
+
+  // Resize canvas to match parent
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ro = new ResizeObserver(() => {
+      canvas.width  = canvas.offsetWidth
+      canvas.height = canvas.offsetHeight
+      draw()
+    })
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <canvas ref={canvasRef} style={{
+      position: "absolute", inset: 0,
+      width: "100%", height: "100%",
+      pointerEvents: "none", zIndex: 5,
+    }} />
+  )
+}
+
 function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }) {
   const [tf,          setTf]          = useState("M5")
   const [chartAsset,  setChartAsset]  = useState(selectedAsset || "XAUUSD")
@@ -1627,7 +1809,25 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
   const [marketClosed,setMarketClosed]= useState(false)
   const [cachedAt,    setCachedAt]    = useState(null)
   const [fullscreen,  setFullscreen]  = useState(false)
+  const [livePos,     setLivePos]     = useState([])
   const tvRef = useRef(null)
+
+  // Fetch live positions for overlay
+  useEffect(() => {
+    const fetchPos = () => {
+      api.get("/trading/positions").then(r => {
+        const pos = (r.data?.positions || []).map(p => ({
+          id: p.ticket, symbol: p.symbol, trade_type: p.type,
+          entry_price: p.open_price, current_price: p.current_price,
+          sl: p.sl, tp: p.tp, profit: p.profit, volume: p.volume,
+        }))
+        setLivePos(pos)
+      }).catch(() => {})
+    }
+    fetchPos()
+    const id = setInterval(fetchPos, 10000)
+    return () => clearInterval(id)
+  }, [])
   const widgetRef = useRef(null)
 
   const TF_OPTIONS = ["M1","M5","M15","M30","H1","H4","D1"]
@@ -1877,6 +2077,7 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
           <ChartHeader isFullscreen={false} />
           <div style={{ position: "relative", width: "100%", height: 420 }}>
             <div id="tv-chart-inline" style={{ width: "100%", height: "100%" }} />
+            <TradeOverlay positions={livePos} signal={signal} chartAsset={chartAsset} />
             {/* PesaPips watermark — sits on top of the iframe */}
             <div style={{
               position: "absolute", bottom: 52, right: 80,
