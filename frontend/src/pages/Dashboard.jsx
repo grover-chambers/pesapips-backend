@@ -1712,12 +1712,19 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
     const container = document.getElementById(containerId)
     if (!container) return
 
+    // Use explicit dimensions from container for reliable sizing
+    const rect = container.getBoundingClientRect()
+    const w = rect.width  || container.offsetWidth  || window.innerWidth
+    const h = rect.height || container.offsetHeight || window.innerHeight - 80
+
     const tvSym = TV_SYMBOL_MAP[chartAsset] || `OANDA:${chartAsset}`
     const interval = TF_TV[tf] || "5"
     const studies = getStrategyStudies()
 
     const config = {
       autosize: true,
+      width:  w || "100%",
+      height: h || "100%",
       symbol: tvSym,
       interval,
       timezone: "Africa/Nairobi",
