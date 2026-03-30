@@ -1613,20 +1613,30 @@ function AutorunBar({ signal, activeStrat }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LIVE SIGNAL OVERLAY — candlestick chart + signal markers + confidence
 // ─────────────────────────────────────────────────────────────────────────────
-function SignalOverlay({ activeStrat, selectedAsset }) {
-  const chartRef      = useRef(null)
-  const chartObj      = useRef(null)
-  const candleSeries  = useRef(null)
-  const markerTimeout = useRef(null)
+function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }) {
+  const [tf,          setTf]          = useState("M5")
+  const [chartAsset,  setChartAsset]  = useState(selectedAsset || "XAUUSD")
+
+  // Sync from parent when selectedAsset prop changes
+  useEffect(() => {
+    if (selectedAsset && selectedAsset !== chartAsset) setChartAsset(selectedAsset)
+  }, [selectedAsset])
   const [signal,      setSignal]      = useState(null)
   const [loading,     setLoading]     = useState(false)
   const [lastUpdate,  setLastUpdate]  = useState(null)
-  const [chartReady,  setChartReady]  = useState(false)
-  const [tf,          setTf]          = useState("M5")
-  const [marketClosed, setMarketClosed] = useState(false)
+  const [marketClosed,setMarketClosed]= useState(false)
   const [cachedAt,    setCachedAt]    = useState(null)
+  const [fullscreen,  setFullscreen]  = useState(false)
+  const tvRef = useRef(null)
+  const widgetRef = useRef(null)
 
-  const TF_OPTIONS = ["M1","M5","M15","M30","H1","H4"]
+  const TF_OPTIONS = ["M1","M5","M15","M30","H1","H4","D1"]
+  // Notify parent when asset changes
+  const handleAssetChange = (asset) => {
+    setChartAsset(asset)
+    if (onAssetChange) onAssetChange(asset)
+  }
+
   const WATCHED_ASSETS = [
     { label: "XAU/USD", value: "XAUUSD" },
     { label: "XAG/USD", value: "XAGUSD" },
@@ -1644,206 +1654,252 @@ function SignalOverlay({ activeStrat, selectedAsset }) {
     { label: "DXY",     value: "DXY"    },
     { label: "USD/KES", value: "USDKES" },
   ]
-  const [chartAsset, setChartAsset] = useState("XAUUSD")
 
-  // Load lightweight-charts dynamically
-  useEffect(() => {
-    if (window.LightweightCharts) { setChartReady(true); return }
+  // Map our symbols → TradingView symbols
+  const TV_SYMBOL_MAP = {
+    XAUUSD: "OANDA:XAUUSD", XAGUSD: "OANDA:XAGUSD",
+    EURUSD: "OANDA:EURUSD", GBPUSD: "OANDA:GBPUSD",
+    USDJPY: "OANDA:USDJPY", BTCUSD: "COINBASE:BTCUSD",
+    ETHUSD: "COINBASE:ETHUSD", USDCHF: "OANDA:USDCHF",
+    AUDUSD: "OANDA:AUDUSD", OIL: "NYMEX:CL1!",
+    NASDAQ: "NASDAQ:COMP", DOW: "DJ:DJI",
+    SPX: "SP:SPX", DXY: "TVC:DXY", USDKES: "FX:USDKES",
+  }
+
+  // Map our TF → TradingView interval
+  const TF_TV = { M1:"1", M5:"5", M15:"15", M30:"30", H1:"60", H4:"240", D1:"D" }
+
+  // Get indicators from active strategy
+  const getStrategyStudies = () => {
+    if (!activeStrat?.custom_params) return []
+    const p = activeStrat.custom_params
+    const indicators = Array.isArray(p.indicators) ? p.indicators : []
+    const studies = []
+    if (indicators.includes("EMA") || p.ema_fast) {
+      studies.push({ id: "MAExp@tv-basicstudies", inputs: { length: p.ema_fast || 9 }, overrides: { "Plot.color": "#5b9cf6" } })
+      studies.push({ id: "MAExp@tv-basicstudies", inputs: { length: p.ema_mid || 21 }, overrides: { "Plot.color": "#d4a843" } })
+      studies.push({ id: "MAExp@tv-basicstudies", inputs: { length: p.ema_slow || 50 }, overrides: { "Plot.color": "#f06b6b" } })
+    }
+    if (indicators.includes("RSI") || p.rsi_period) {
+      studies.push({ id: "RSI@tv-basicstudies", inputs: { length: p.rsi_period || 14 } })
+    }
+    if (indicators.includes("MACD") || p.macd_fast) {
+      studies.push({ id: "MACD@tv-basicstudies", inputs: { fast_length: p.macd_fast || 12, slow_length: p.macd_slow || 26, signal_smoothing: p.macd_signal || 9 } })
+    }
+    if (indicators.includes("BOLLINGER") || p.bb_period) {
+      studies.push({ id: "BB@tv-basicstudies", inputs: { length: p.bb_period || 20, mult: p.bb_std || 2 } })
+    }
+    if (indicators.includes("STOCH") || p.stoch_k) {
+      studies.push({ id: "Stoch@tv-basicstudies" })
+    }
+    return studies
+  }
+
+  // Build and inject TradingView widget
+  const buildWidget = (containerId) => {
+    if (widgetRef.current) {
+      try { widgetRef.current.remove() } catch {}
+      widgetRef.current = null
+    }
+    const container = document.getElementById(containerId)
+    if (!container) return
+
+    const tvSym = TV_SYMBOL_MAP[chartAsset] || `OANDA:${chartAsset}`
+    const interval = TF_TV[tf] || "5"
+    const studies = getStrategyStudies()
+
+    const config = {
+      autosize: true,
+      symbol: tvSym,
+      interval,
+      timezone: "Africa/Nairobi",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      toolbar_bg: "#1f2330",
+      enable_publishing: false,
+      hide_top_toolbar: false,
+      hide_legend: false,
+      save_image: true,
+      container_id: containerId,
+      studies: studies.map(s => s.id),
+      overrides: {
+        "paneProperties.background": "#171a20",
+        "paneProperties.backgroundType": "solid",
+        "scalesProperties.textColor": "#9aa0b0",
+        "mainSeriesProperties.candleStyle.upColor": "#3dd68c",
+        "mainSeriesProperties.candleStyle.downColor": "#f06b6b",
+        "mainSeriesProperties.candleStyle.borderUpColor": "#3dd68c",
+        "mainSeriesProperties.candleStyle.borderDownColor": "#f06b6b",
+        "mainSeriesProperties.candleStyle.wickUpColor": "#3dd68c",
+        "mainSeriesProperties.candleStyle.wickDownColor": "#f06b6b",
+      },
+    }
+
     const script = document.createElement("script")
-    script.src = "https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"
-    script.onload = () => setChartReady(true)
+    script.src = "https://s3.tradingview.com/tv.js"
+    script.async = true
+    script.onload = () => {
+      if (window.TradingView) {
+        widgetRef.current = new window.TradingView.widget(config)
+      }
+    }
+    // If already loaded, just create widget
+    if (window.TradingView) {
+      widgetRef.current = new window.TradingView.widget(config)
+      return
+    }
     document.head.appendChild(script)
-  }, [])
+  }
 
-  // Init chart once script loaded
+  // Rebuild widget when asset, tf, or fullscreen changes
   useEffect(() => {
-    if (!chartReady || !chartRef.current || chartObj.current) return
-    const chart = window.LightweightCharts.createChart(chartRef.current, {
-      width:  chartRef.current.clientWidth,
-      height: chartRef.current.clientHeight || 400,
-      layout: { background: { color: "transparent" }, textColor: C.text3 },
-      grid:   { vertLines: { color: C.border }, horzLines: { color: C.border } },
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: C.border },
-      timeScale: { borderColor: C.border, timeVisible: true, secondsVisible: false },
-      handleScroll: true,
-      handleScale:  true,
-    })
-    candleSeries.current = chart.addCandlestickSeries({
-      upColor:   C.green,  downColor:  C.red,
-      borderUpColor: C.green, borderDownColor: C.red,
-      wickUpColor:   C.green, wickDownColor:   C.red,
-    })
-    chartObj.current = chart
+    const id = fullscreen ? "tv-chart-fullscreen" : "tv-chart-inline"
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => buildWidget(id), 100)
+    return () => clearTimeout(timer)
+  }, [chartAsset, tf, fullscreen, activeStrat?.id])
 
-    // Resize observer
-    const ro = new ResizeObserver(() => {
-      if (chartRef.current) chart.applyOptions({
-        width:  chartRef.current.clientWidth,
-        height: chartRef.current.clientHeight || 400,
-      })
-    })
-    ro.observe(chartRef.current)
-    return () => { ro.disconnect(); chart.remove(); chartObj.current = null }
-  }, [chartReady])
-
-  // Fetch candles + signal
-  const fetchData = async () => {
-    if (!candleSeries.current) return
+  // Fetch signal separately (doesn't need to rebuild chart)
+  const fetchSignal = async () => {
     setLoading(true)
     try {
-      const asset    = chartAsset
-      const timeframe = tf
-      const periods  = 200
-
-      // Fetch candles
-      const candleRes = await api.get(`/market/candles/${asset}?timeframe=${timeframe}&periods=${periods}`)
+      const candleRes = await api.get(`/market/candles/${chartAsset}?timeframe=${tf}&periods=200`)
       setMarketClosed(candleRes.data?.market_closed || false)
-      if (candleRes.data?.cached_at) setCachedAt(new Date(candleRes.data.cached_at * 1000).toLocaleString('en-KE', { dateStyle:'short', timeStyle:'short' }))
-      const candles   = (candleRes.data?.candles || []).map(c => ({
-        time:  c.time,
-        open:  c.open,
-        high:  c.high,
-        low:   c.low,
-        close: c.close,
-      }))
-      if (candles.length > 0) {
-        candleSeries.current.setData(candles)
-        chartObj.current?.timeScale().fitContent()
-      }
-
-      // Fetch signal
-      const params = activeStrat?.custom_params || {
-        indicators: ["EMA","RSI","MACD"],
-        ema_fast:9, ema_mid:21, ema_slow:50,
-        rsi_period:14, rsi_buy:35, rsi_sell:65,
-        macd_fast:12, macd_slow:26, macd_signal:9,
-      }
-      const sigRes = await api.post("/signal/run", { asset, timeframe, params })
-      const sig    = sigRes.data
-      setSignal(sig)
+      if (candleRes.data?.cached_at) setCachedAt(new Date(candleRes.data.cached_at * 1000).toLocaleString("en-KE", { dateStyle:"short", timeStyle:"short" }))
+      const params = activeStrat?.custom_params || { indicators: ["EMA","RSI","MACD"], ema_fast:9, ema_mid:21, ema_slow:50, rsi_period:14, macd_fast:12, macd_slow:26, macd_signal:9 }
+      const sigRes = await api.post("/signal/run", { asset: chartAsset, timeframe: tf, params })
+      setSignal(sigRes.data)
       setLastUpdate(new Date().toLocaleTimeString())
-
-      // Place marker on latest candle
-      if (sig.signal !== "HOLD" && candles.length > 0) {
-        const lastCandle = candles[candles.length - 1]
-        candleSeries.current.setMarkers([{
-          time:     lastCandle.time,
-          position: sig.signal === "BUY" ? "belowBar" : "aboveBar",
-          color:    sig.signal === "BUY" ? C.green : C.red,
-          shape:    sig.signal === "BUY" ? "arrowUp" : "arrowDown",
-          text:     sig.signal + " " + Math.round(sig.confidence * 100) + "%",
-          size:     2,
-        }])
-      } else {
-        candleSeries.current.setMarkers([])
-      }
-    } catch(e) {
-      console.error("SignalOverlay fetch error:", e)
-    }
+    } catch(e) { console.error("Signal fetch error:", e) }
     setLoading(false)
   }
 
-  // Fetch on mount, on strategy/asset/tf change, and every 30s
   useEffect(() => {
-    if (!chartReady) return
-    fetchData()
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
-  }, [chartReady, activeStrat?.id, chartAsset, tf])
+    fetchSignal()
+    const id = setInterval(fetchSignal, 60000)
+    return () => clearInterval(id)
+  }, [chartAsset, tf, activeStrat?.id])
 
-  const sigColor = signal?.signal === "BUY" ? C.green
-                 : signal?.signal === "SELL" ? C.red : C.text3
-  const sigBg    = signal?.signal === "BUY" ? C.greenDim
-                 : signal?.signal === "SELL" ? C.redDim : C.surface2
+  const sigColor = signal?.signal === "BUY" ? C.green : signal?.signal === "SELL" ? C.red : C.text3
+
+  const ChartHeader = ({ isFullscreen }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "10px 16px", borderBottom: `1px solid ${C.border}`, background: C.surface2,
+                  flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: loading ? C.gold : C.green,
+                      boxShadow: `0 0 6px ${loading ? C.gold : C.green}` }} />
+        <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 600, letterSpacing: "0.08em" }}>
+          LIVE CHART — {chartAsset}
+        </span>
+        {activeStrat && (
+          <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold, padding: "2px 8px",
+                         background: C.goldDim, borderRadius: 4 }}>
+            {activeStrat.custom_params?.strategy_name || "Strategy"}
+          </span>
+        )}
+        {marketClosed && (
+          <span style={{ fontFamily: C.mono, fontSize: 9, color: C.red, padding: "2px 10px",
+                         background: "#f06b6b15", border: "1px solid #f06b6b40", borderRadius: 4 }}>
+            ⏸ MARKET CLOSED {cachedAt ? `· last data ${cachedAt}` : ""}
+          </span>
+        )}
+        {signal && (
+          <span style={{ fontFamily: C.mono, fontSize: 10, fontWeight: 700, color: sigColor,
+                         padding: "2px 10px", background: `${sigColor}15`, borderRadius: 4,
+                         border: `1px solid ${sigColor}40` }}>
+            {signal.signal} {signal.confidence ? Math.round(signal.confidence * 100) + "%" : ""}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* Asset dropdown */}
+        <select value={chartAsset} onChange={e => handleAssetChange(e.target.value)}
+          style={{ background: C.surface3, border: `1px solid ${C.border2}`, color: C.gold,
+                   fontFamily: C.mono, fontSize: 10, borderRadius: 6, padding: "3px 8px",
+                   cursor: "pointer", outline: "none", fontWeight: 600 }}>
+          {WATCHED_ASSETS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+        </select>
+        {/* TF buttons */}
+        <div style={{ display: "flex", gap: 2 }}>
+          {TF_OPTIONS.map(t => (
+            <button key={t} onClick={() => setTf(t)}
+              style={{ padding: "3px 7px", borderRadius: 4, border: "none", cursor: "pointer",
+                       fontFamily: C.mono, fontSize: 9, fontWeight: 600,
+                       background: tf === t ? C.gold : C.surface3,
+                       color: tf === t ? "#000" : C.text3 }}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <button onClick={fetchSignal} disabled={loading}
+          style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`,
+                   background: "transparent", color: C.text3, fontFamily: C.mono, fontSize: 9,
+                   cursor: "pointer", opacity: loading ? 0.5 : 1 }}>
+          {loading ? "..." : "↺"}
+        </button>
+        <button onClick={() => setFullscreen(f => !f)}
+          title={isFullscreen ? "Exit fullscreen" : "Fullscreen chart"}
+          style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.gold}50`,
+                   background: isFullscreen ? C.gold : C.goldDim,
+                   color: isFullscreen ? "#000" : C.gold,
+                   fontFamily: C.mono, fontSize: 9, cursor: "pointer",
+                   fontWeight: 600, letterSpacing: "0.05em" }}>
+          {isFullscreen ? "✕ Exit" : "⛶ Expand"}
+        </button>
+        {lastUpdate && <span style={{ fontFamily: C.mono, fontSize: 9, color: C.text3 }}>{lastUpdate}</span>}
+      </div>
+    </div>
+  )
 
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "12px 18px", borderBottom: `1px solid ${C.border}`, background: C.surface2 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: loading ? C.gold : C.green,
-                        boxShadow: `0 0 6px ${loading ? C.gold : C.green}`, animation: loading ? "pulse 1s infinite" : "none" }} />
-          <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 600, letterSpacing: "0.08em" }}>
-            LIVE CHART — {chartAsset}
-          </span>
-          {activeStrat && (
-            <span style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, padding: "2px 8px",
-                           background: C.surface3, borderRadius: 4 }}>
-              {activeStrat.custom_params?.strategy_name || "Strategy"}
-            </span>
-          )}
-          {marketClosed && (
-            <span style={{ fontFamily: C.mono, fontSize: 9, color: "#f06b6b", padding: "2px 10px",
-                           background: "#f06b6b15", border: "1px solid #f06b6b40", borderRadius: 4 }}>
-              ⏸ MARKET CLOSED {cachedAt ? `· last data ${cachedAt}` : "· cached data"}
-            </span>
-          )}
+    <>
+      {/* Inline chart */}
+      {!fullscreen && (
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
+                      overflow: "hidden", marginBottom: 16, display: "flex", flexDirection: "column" }}>
+          <ChartHeader isFullscreen={false} />
+          <div id="tv-chart-inline" style={{ width: "100%", height: 420 }} />
+          <AutorunBar signal={signal} activeStrat={activeStrat} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Asset dropdown */}
-          <select
-            value={chartAsset}
-            onChange={e => setChartAsset(e.target.value)}
-            style={{
-              background: "#1f2330", border: "1px solid rgba(255,255,255,0.12)",
-              color: "#d4a843", fontFamily: "'DM Mono','Courier New',monospace",
-              fontSize: 10, borderRadius: 6, padding: "3px 8px",
-              cursor: "pointer", outline: "none", fontWeight: 600,
-            }}>
-            {WATCHED_ASSETS.map(a => (
-              <option key={a.value} value={a.value}>{a.label}</option>
-            ))}
-          </select>
-          {/* TF selector */}
-          <div style={{ display: "flex", gap: 3 }}>
-            {TF_OPTIONS.map(t => (
-              <button key={t} onClick={() => setTf(t)}
-                style={{ padding: "3px 7px", borderRadius: 4, border: "none", cursor: "pointer",
-                         fontFamily: C.mono, fontSize: 9, fontWeight: 600,
-                         background: (activeStrat?.custom_params?.timeframe || tf) === t ? C.gold : C.surface3,
-                         color:      (activeStrat?.custom_params?.timeframe || tf) === t ? "#000" : C.text3 }}>
-                {t}
-              </button>
-            ))}
+      )}
+
+      {/* Fullscreen overlay — covers entire viewport, hides sidebar */}
+      {fullscreen && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: C.bg, display: "flex", flexDirection: "column",
+        }}>
+          <ChartHeader isFullscreen={true} />
+          <div style={{ flex: 1, display: "flex", gap: 0 }}>
+            {/* Main chart */}
+            <div id="tv-chart-fullscreen" style={{ flex: 1, height: "100%" }} />
+            {/* Side panel — signal + autorun */}
+            <div style={{ width: 260, borderLeft: `1px solid ${C.border}`, background: C.surface,
+                          display: "flex", flexDirection: "column", padding: 16, gap: 12, overflowY: "auto" }}>
+              <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.14em" }}>AI SIGNAL</div>
+              <div style={{ fontFamily: C.display, fontSize: 42, color: sigColor, lineHeight: 1 }}>
+                {signal?.signal || "—"}
+              </div>
+              {signal?.confidence > 0 && (
+                <div style={{ fontFamily: C.mono, fontSize: 11, color: sigColor }}>
+                  {Math.round(signal.confidence * 100)}% confidence
+                </div>
+              )}
+              {signal?.reason && (
+                <div style={{ fontFamily: C.sans, fontSize: 11, color: C.text2, lineHeight: 1.6 }}>
+                  {signal.reason}
+                </div>
+              )}
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, marginTop: 4 }}>
+                <AutorunBar signal={signal} activeStrat={activeStrat} />
+              </div>
+            </div>
           </div>
-          <button onClick={fetchData} disabled={loading}
-            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`,
-                     background: "transparent", color: C.text3, fontFamily: C.mono, fontSize: 9,
-                     cursor: "pointer", opacity: loading ? 0.5 : 1 }}>
-            {loading ? "..." : "↺ Refresh"}
-          </button>
-          <button
-            onClick={() => {
-              const TF_TV = { M1:"1", M5:"5", M15:"15", M30:"30", H1:"60", H4:"240", D1:"D" }
-              const tvInterval = TF_TV[tf] || "5"
-              const sym = chartAsset || "XAUUSD"
-              window.open(
-                `https://www.tradingview.com/chart/?symbol=${sym}&interval=${tvInterval}&theme=dark`,
-                "_blank"
-              )
-            }}
-            title="Open full chart with indicators & drawing tools"
-            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.gold}50`,
-                     background: C.goldDim, color: C.gold, fontFamily: C.mono, fontSize: 9,
-                     cursor: "pointer", letterSpacing: "0.05em", fontWeight: 600 }}>
-            ⛶ Full Screen
-          </button>
-          {lastUpdate && (
-            <span style={{ fontFamily: C.mono, fontSize: 9, color: C.text3 }}>
-              {lastUpdate}
-            </span>
-          )}
         </div>
-      </div>
-
-      {/* Chart */}
-      <div ref={chartRef} style={{ width: "100%", flex: 1, minHeight: 400, background: "transparent" }} />
-
-      {/* Autorun bar */}
-      <AutorunBar signal={signal} activeStrat={activeStrat} />
-    </div>
+      )}
+    </>
   )
 }
 
@@ -2337,15 +2393,31 @@ function MarketIntel({ user }) {
 // ── USER BLOG ─────────────────────────────────────────────────────────────────
 
 function Overview({ user, summary, setActiveSection }) {
-  const [regime, setRegime] = useState(null)
-  useEffect(() => {
-    api.post("/signal/market-intel", { symbol:"XAUUSD", timeframe:"H1", periods:200 })
-      .then(r => setRegime(r.data)).catch(()=>{})
-  }, [])
+  const [regime,        setRegime]        = useState(null)
+  const [intelLoading,  setIntelLoading]  = useState(false)
+  const [activeTab,     setActiveTab]     = useState("calendar")
+  const [selectedAsset, setSelectedAsset] = useState("XAUUSD")
+  const [chartAsset,    setChartAsset]    = useState("XAUUSD")
+  const [signal,        setSignal]        = useState(null)
 
-  const [activeTab,      setActiveTab]      = useState("calendar")
-  const [selectedAsset,  setSelectedAsset]  = useState("XAUUSD")
-  const [signal,         setSignal]         = useState(null)
+  // When chart asset changes — auto-run signal AND market intel in background
+  useEffect(() => {
+    setSignal(null)
+    setRegime(null)
+    setIntelLoading(true)
+    // Run both in parallel
+    Promise.allSettled([
+      api.post("/signal/run", { asset: chartAsset, timeframe: "M5" }),
+      api.post("/signal/market-intel", { symbol: chartAsset, timeframe: "H1", periods: 200 }),
+    ]).then(([sigRes, intelRes]) => {
+      if (sigRes.status === "fulfilled") setSignal(sigRes.value.data)
+      if (intelRes.status === "fulfilled") setRegime(intelRes.value.data)
+      setIntelLoading(false)
+    })
+  }, [chartAsset])
+
+  // Keep selectedAsset in sync with chartAsset
+  useEffect(() => { setSelectedAsset(chartAsset) }, [chartAsset])
   const [strategies,     setStrategies]     = useState([])
   const [myStrategies,   setMyStrategies]   = useState([])
   const [selectedStrat,  setSelectedStrat]  = useState("")
@@ -2359,12 +2431,7 @@ function Overview({ user, summary, setActiveSection }) {
 
   const showStratToast = (msg) => { setStratToast(msg); setTimeout(() => setStratToast(""), 3000) }
 
-  useEffect(() => {
-    setSignal(null)  // clear old signal immediately
-    api.post("/signal/run", { asset: selectedAsset, timeframe: "M5" })
-      .then(r => setSignal(r.data))
-      .catch(() => {})
-  }, [selectedAsset])
+  // signal fetch now handled by chartAsset effect above
 
   // Fetch MT5 live data — priority on load, retry fast until connected
   useEffect(() => {
@@ -2607,7 +2674,9 @@ function Overview({ user, summary, setActiveSection }) {
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           <SignalOverlay
             activeStrat={myStrategies.find(s => s.is_active) || null}
-            selectedAsset={selectedAsset}
+            selectedAsset={chartAsset}
+            onAssetChange={setChartAsset}
+            externalTf={myStrategies.find(s => s.is_active)?.custom_params?.timeframe}
           />
         </div>
 
@@ -2616,7 +2685,7 @@ function Overview({ user, summary, setActiveSection }) {
 
           {/* AI Signal */}
           <div style={{ background: C.surface, border: `1px solid ${sigColor}30`, borderRadius: 14, padding: "18px 20px", flex: "0 0 auto" }}>
-            <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.14em", marginBottom: 12 }}>AI SIGNAL · {selectedAsset}</div>
+            <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.14em", marginBottom: 12 }}>AI SIGNAL · {chartAsset}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 80, height: 80, background: `radial-gradient(ellipse, ${sigColor}15 0%, transparent 70%)` }} />
@@ -2649,16 +2718,49 @@ function Overview({ user, summary, setActiveSection }) {
               <span style={{ fontFamily: C.sans, fontSize: 13, fontWeight: 600, color: C.text }}>Market Intel</span>
               <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold, marginLeft: "auto" }}>AI ANALYSIS →</span>
             </div>
-            <div style={{ padding: "16px 18px", flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-              <p style={{ fontFamily: C.sans, fontSize: 13, color: C.text2, lineHeight: 1.7 }}>
-                Detects live market regime — Trending, Ranging, Volatile or Breakout — and recommends the best strategy for current conditions with one-click execution.
-              </p>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["Regime Detection","Strategy Scoring","Pattern Match","Execute"].map(f => (
-                  <span key={f} style={{ fontFamily: C.mono, fontSize: 9, color: C.gold, padding: "3px 8px", background: C.goldDim, border: `1px solid ${C.gold}20`, borderRadius: 4 }}>{f}</span>
-                ))}
-              </div>
-              <button style={{ marginTop: "auto", padding: "10px", borderRadius: 8, border: `1px solid ${C.gold}40`, background: C.goldDim, color: C.gold, fontFamily: C.mono, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            <div style={{ padding: "14px 18px", flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+              {intelLoading ? (
+                <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, animation: "pulse 1.5s infinite" }}>
+                  🧬 Analysing {chartAsset}...
+                </div>
+              ) : regime ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: C.mono, fontSize: 18, fontWeight: 700,
+                      color: regime.regime === "TRENDING" ? C.green : regime.regime === "VOLATILE" ? C.red : C.gold }}>
+                      {regime.regime || "—"}
+                    </span>
+                    {regime.regime_confidence > 0 && (
+                      <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>
+                        {regime.regime_confidence}% confidence
+                      </span>
+                    )}
+                  </div>
+                  {regime.best_strategy && (
+                    <div style={{ fontFamily: C.sans, fontSize: 12, color: C.text2 }}>
+                      Best strategy: <strong style={{ color: C.gold }}>{regime.best_strategy}</strong>
+                    </div>
+                  )}
+                  {regime.reasoning && (
+                    <div style={{ fontFamily: C.sans, fontSize: 11, color: C.text3, lineHeight: 1.5 }}>
+                      {regime.reasoning?.slice(0, 120)}...
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                    {(regime.pattern_matches || []).slice(0, 3).map(p => (
+                      <span key={p} style={{ fontFamily: C.mono, fontSize: 9, color: C.blue,
+                        padding: "2px 7px", background: C.blueDim, borderRadius: 4 }}>{p}</span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p style={{ fontFamily: C.sans, fontSize: 12, color: C.text3 }}>
+                  Select an asset on the chart to run analysis
+                </p>
+              )}
+              <button style={{ marginTop: "auto", padding: "9px", borderRadius: 8,
+                border: `1px solid ${C.gold}40`, background: C.goldDim, color: C.gold,
+                fontFamily: C.mono, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                 Open Market Intel →
               </button>
             </div>
