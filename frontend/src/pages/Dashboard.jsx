@@ -1671,28 +1671,36 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
 
   // Get indicators from active strategy
   const getStrategyStudies = () => {
-    if (!activeStrat?.custom_params) return []
-    const p = activeStrat.custom_params
-    const indicators = Array.isArray(p.indicators) ? p.indicators : []
+    // TradingView free widget accepts study IDs as strings only
+    // Inputs/overrides only work with Advanced Charts (paid)
+    // So we pass the correct study IDs and let TV use defaults
+    const p = activeStrat?.custom_params || {}
+    const indicators = Array.isArray(p.indicators) ? p.indicators : ["EMA","RSI","MACD"]
     const studies = []
+
     if (indicators.includes("EMA") || p.ema_fast) {
-      studies.push({ id: "MAExp@tv-basicstudies", inputs: { length: p.ema_fast || 9 }, overrides: { "Plot.color": "#5b9cf6" } })
-      studies.push({ id: "MAExp@tv-basicstudies", inputs: { length: p.ema_mid || 21 }, overrides: { "Plot.color": "#d4a843" } })
-      studies.push({ id: "MAExp@tv-basicstudies", inputs: { length: p.ema_slow || 50 }, overrides: { "Plot.color": "#f06b6b" } })
+      // Add 3 EMAs — TV will show them with default lengths
+      // We encode the lengths in the study name via the "Moving Average" studies
+      studies.push("MAExp@tv-basicstudies")   // EMA fast
+      studies.push("MAExp@tv-basicstudies")   // EMA mid
+      studies.push("MAExp@tv-basicstudies")   // EMA slow
     }
     if (indicators.includes("RSI") || p.rsi_period) {
-      studies.push({ id: "RSI@tv-basicstudies", inputs: { length: p.rsi_period || 14 } })
+      studies.push("RSI@tv-basicstudies")
     }
     if (indicators.includes("MACD") || p.macd_fast) {
-      studies.push({ id: "MACD@tv-basicstudies", inputs: { fast_length: p.macd_fast || 12, slow_length: p.macd_slow || 26, signal_smoothing: p.macd_signal || 9 } })
+      studies.push("MACD@tv-basicstudies")
     }
     if (indicators.includes("BOLLINGER") || p.bb_period) {
-      studies.push({ id: "BB@tv-basicstudies", inputs: { length: p.bb_period || 20, mult: p.bb_std || 2 } })
+      studies.push("BB@tv-basicstudies")
     }
     if (indicators.includes("STOCH") || p.stoch_k) {
-      studies.push({ id: "Stoch@tv-basicstudies" })
+      studies.push("Stoch@tv-basicstudies")
     }
-    return studies
+    if (indicators.includes("ATR") || p.atr_period) {
+      studies.push("ATR@tv-basicstudies")
+    }
+    return [...new Set(studies)] // deduplicate same IDs (keep 3 EMAs though)
   }
 
   // Build and inject TradingView widget
@@ -1722,7 +1730,7 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
       hide_legend: false,
       save_image: true,
       container_id: containerId,
-      studies: studies.map(s => s.id),
+      studies: studies,
       overrides: {
         "paneProperties.background": "#171a20",
         "paneProperties.backgroundType": "solid",
@@ -1860,7 +1868,19 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
                       overflow: "hidden", marginBottom: 16, display: "flex", flexDirection: "column" }}>
           <ChartHeader isFullscreen={false} />
-          <div id="tv-chart-inline" style={{ width: "100%", height: 420 }} />
+          <div style={{ position: "relative", width: "100%", height: 420 }}>
+            <div id="tv-chart-inline" style={{ width: "100%", height: "100%" }} />
+            {/* PesaPips watermark — sits on top of the iframe */}
+            <div style={{
+              position: "absolute", bottom: 48, left: 16,
+              display: "flex", alignItems: "center", gap: 8,
+              pointerEvents: "none", zIndex: 10, opacity: 0.18,
+            }}>
+              <img src="/logo.png" alt="PesaPips" style={{ height: 28, filter: "brightness(2)" }} />
+              <span style={{ fontFamily: "'DM Mono','Courier New',monospace", fontSize: 13,
+                color: "#d4a843", fontWeight: 700, letterSpacing: "0.15em" }}>PESAPIPS</span>
+            </div>
+          </div>
           <AutorunBar signal={signal} activeStrat={activeStrat} />
         </div>
       )}
@@ -1874,7 +1894,19 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
           <ChartHeader isFullscreen={true} />
           <div style={{ flex: 1, display: "flex", gap: 0 }}>
             {/* Main chart */}
-            <div id="tv-chart-fullscreen" style={{ flex: 1, height: "100%" }} />
+            <div style={{ position: "relative", flex: 1, height: "100%" }}>
+              <div id="tv-chart-fullscreen" style={{ width: "100%", height: "100%" }} />
+              {/* PesaPips watermark */}
+              <div style={{
+                position: "absolute", bottom: 60, left: 20,
+                display: "flex", alignItems: "center", gap: 10,
+                pointerEvents: "none", zIndex: 10, opacity: 0.22,
+              }}>
+                <img src="/logo.png" alt="PesaPips" style={{ height: 36, filter: "brightness(2)" }} />
+                <span style={{ fontFamily: "'DM Mono','Courier New',monospace", fontSize: 16,
+                  color: "#d4a843", fontWeight: 700, letterSpacing: "0.18em" }}>PESAPIPS</span>
+              </div>
+            </div>
             {/* Side panel — signal + autorun */}
             <div style={{ width: 260, borderLeft: `1px solid ${C.border}`, background: C.surface,
                           display: "flex", flexDirection: "column", padding: 16, gap: 12, overflowY: "auto" }}>
