@@ -65,8 +65,8 @@ export default function BlogPost() {
       {/* Nav */}
       <div style={{ borderBottom:`1px solid ${C.border}`, padding:"16px 40px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:100, background:`rgba(23,26,32,0.97)`, backdropFilter:"blur(16px)" }}>
         <a href="/" style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:30, height:30, background:C.gold, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:15, color:"#000" }}>P</div>
-          <span style={{ fontFamily:C.display, fontSize:18, color:C.text }}>PesaPips AI</span>
+            <img src="/logo.png" alt="PesaPips" style={{width:30,height:30,borderRadius:7}} />
+            <span style={{ fontFamily:C.display, fontSize:18, color:C.text }}>PesaPips AI</span>
         </a>
         <div style={{ display:"flex", gap:16, alignItems:"center" }}>
           <button onClick={()=>navigate("/blog")} style={{ background:"none", border:"none", fontFamily:C.sans, fontSize:14, color:C.text2, cursor:"pointer" }}>← Blog</button>

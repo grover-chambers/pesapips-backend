@@ -1123,30 +1123,28 @@ function CTABanner() {
 // ── FOOTER ─────────────────────────────────────────────────────────────────
 function Footer() {
   const cols = {
-    Product:  [
-      { label: "Features",    href: "#features"     },
-      { label: "Pricing",     href: "#pricing"      },
-      { label: "Backtester",  href: "#how-it-works" },
-      { label: "Strategies",  href: "#features"     },
-      { label: "API Docs",    href: "/docs"         },
+    Product: [
+        { label: "Features", href: "#features" },
+        { label: "Pricing", href: "#pricing" },
+        { label: "Backtester", href: "#how-it-works" },
+        { label: "Strategies", href: "#features" },
+        { label: "Blog", href: "/blog" },
     ],
-    Support:  [
-      { label: "Help Center",        href: "#contact"  },
-      { label: "Contact Us",         href: "#contact"  },
-      { label: "WhatsApp Support",   href: "https://wa.me/254700000000" },
-      { label: "Telegram Community", href: "https://t.me/pesapips_ai"   },
+    Support: [
+        { label: "Help Center", href: "#contact" },
+        { label: "Contact Us", href: "#contact" },
+        { label: "WhatsApp Support", href: "https://wa.me/254700000000" },
+        { label: "Telegram Community", href: "https://t.me/pesapips_ai" },
     ],
-    Legal:    [
-      { label: "Terms of Service", href: "/terms"   },
-      { label: "Privacy Policy",   href: "/privacy" },
-      { label: "Risk Disclaimer",  href: "/risk"    },
-      { label: "Cookie Policy",    href: "/cookies" },
+    Legal: [
+        { label: "Terms of Service", href: "/terms" },
+        { label: "Privacy Policy", href: "/privacy" },
+        { label: "Risk Disclaimer", href: "/risk" },
     ],
-    Company:  [
-      { label: "About Us",  href: "#about"   },
-      { label: "Blog",      href: "/blog"    },
-      { label: "Careers",   href: "/careers" },
-      { label: "Press Kit", href: "/press"   },
+    Company: [
+        { label: "About Us", href: "#about" },
+        { label: "Blog", href: "/blog" },
+        { label: "Contact", href: "#contact" },
     ],
   }
 
@@ -1156,8 +1154,8 @@ function Footer() {
         <div className="footer-grid" style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr", gap:40, marginBottom:56, flexWrap:"wrap" }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
-              <div style={{ width:32,height:32,background:C.gold,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:"#000" }}>P</div>
-              <span style={{ fontFamily:C.display, fontSize:18, color:C.text }}>PesaPips AI</span>
+                <img src="/logo.png" alt="PesaPips" style={{width:32,height:32,borderRadius:8}} />
+                <span style={{ fontFamily:C.display, fontSize:18, color:C.text }}>PesaPips AI</span>
             </div>
             <p style={{ fontFamily:C.sans, fontSize:13, color:C.text3, lineHeight:1.8, maxWidth:220 }}>
               AI-guided trading automation for the modern Kenyan trader.

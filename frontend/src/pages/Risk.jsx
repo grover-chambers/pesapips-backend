@@ -23,10 +23,10 @@ export default function Risk() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
 
       <div style={{ borderBottom: `1px solid ${C.border}`, padding: "16px 40px", display: "flex", alignItems: "center", gap: 16 }}>
-        <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div style={{ width: 30, height: 30, background: C.gold, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, color: "#000" }}>P</div>
-          <span style={{ fontFamily: C.display, fontSize: 18, color: C.text }}>PesaPips AI</span>
-        </a>
+    <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+        <img src="/logo.png" alt="PesaPips" style={{width:30,height:30,borderRadius:7}} />
+        <span style={{ fontFamily: C.display, fontSize: 18, color: C.text }}>PesaPips AI</span>
+    </a>
         <span style={{ color: C.text3, fontSize: 13, fontFamily: C.sans }}>/ Risk Disclaimer</span>
       </div>
 

@@ -6932,7 +6932,9 @@ function Dashboard() {
 
           {/* Logo */}
           <div style={{ padding: collapsed ? "18px 0" : "20px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10, justifyContent: collapsed ? "center" : "flex-start" }}>
-            <div style={{ width: 30, height: 30, background: C.gold, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, color: "#000", flexShrink: 0 }}>P</div>
+            <div style={{ width: 30, height: 30, borderRadius: 7, flexShrink: 0, overflow: "hidden" }}>
+            <img src="/logo.png" alt="PesaPips" style={{ width: 30, height: 30, objectFit: "cover" }} />
+        </div>
             {!collapsed && (
               <div>
                 <div style={{ fontFamily: C.display, fontSize: 16, color: C.text, lineHeight: 1 }}>PesaPips</div>

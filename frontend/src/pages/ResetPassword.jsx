@@ -48,8 +48,11 @@ export default function ResetPassword() {
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ width: 400, maxWidth: "90vw" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <span style={{ fontFamily: C.display, fontSize: 24, color: C.text }}>PesaPips</span>
-          <span style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, marginLeft: 8, letterSpacing: "0.15em" }}>AI</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                <img src="/logo.png" alt="PesaPips" style={{width:32,height:32,borderRadius:8}} />
+                <span style={{ fontFamily: C.display, fontSize: 24, color: C.text }}>PesaPips</span>
+                <span style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.15em" }}>AI</span>
+            </div>
         </div>
 
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32 }}>

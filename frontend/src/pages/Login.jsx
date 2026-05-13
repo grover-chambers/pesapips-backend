@@ -112,11 +112,11 @@ export default function Login() {
           <div style={{ position: "relative", zIndex: 1, maxWidth: 440, width: "100%", animation: "fadeUp 0.5s ease both" }}>
 
             {/* Logo */}
-            <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 52, textDecoration: "none" }}>
-              <div style={{ width: 34, height: 34, background: C.gold, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 17, color: "#000", fontFamily: C.sans }}>P</div>
-              <span style={{ fontFamily: C.display, fontSize: 20, color: C.text, letterSpacing: "-0.01em" }}>PesaPips</span>
-              <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold, letterSpacing: "0.18em", opacity: 0.8 }}>AI</span>
-            </Link>
+        <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 52, textDecoration: "none" }}>
+            <img src="/logo.png" alt="PesaPips" style={{width:34,height:34,borderRadius:8}} />
+            <span style={{ fontFamily: C.display, fontSize: 20, color: C.text, letterSpacing: "-0.01em" }}>PesaPips</span>
+            <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold, letterSpacing: "0.18em", opacity: 0.8 }}>AI</span>
+        </Link>
 
             {/* Heading */}
             <h1 style={{ fontFamily: C.display, fontSize: 36, color: C.text, letterSpacing: "-0.02em", marginBottom: 8, lineHeight: 1.15 }}>

@@ -2358,8 +2358,13 @@ export default function AdminDashboard() {
       <div style={{ width: 220, background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", flexShrink: 0 }}>
         {/* Logo */}
         <div style={{ padding: "24px 20px", borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ fontFamily: C.display, fontSize: 16, color: C.gold, letterSpacing: 2 }}>PESAPIPS</div>
-          <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.14em", marginTop: 3 }}>ADMIN CONSOLE</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <img src="/logo.png" alt="PesaPips" style={{width:30,height:30,borderRadius:7}} />
+                <div>
+                    <div style={{ fontFamily: C.display, fontSize: 16, color: C.gold, letterSpacing: 2 }}>PESAPIPS</div>
+                    <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.14em", marginTop: 3 }}>ADMIN CONSOLE</div>
+                </div>
+            </div>
         </div>
 
         {/* Nav */}
