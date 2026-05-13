@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "../api"
 
-const API = import.meta.env.VITE_API_URL || "https://pesapips-backend.onrender.com"
-
 const C = {
   bg:       "#171a20",
   surface:  "#1f2330",
@@ -27,13 +25,6 @@ const C = {
   display:  "'DM Serif Display', Georgia, serif",
   sans:     "'DM Sans', system-ui, sans-serif",
 }
-
-const api = axios.create({ baseURL: API })
-api.interceptors.request.use(cfg => {
-  const token = localStorage.getItem("pp_token")
-  if (token) cfg.headers.Authorization = `Bearer ${token}`
-  return cfg
-})
 
 const NAV = [
   { id: "overview",    icon: "🏠", label: "Overview"      },
