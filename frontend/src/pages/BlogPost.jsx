@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import axios from "axios"
+import API_URL from "../api"
+import { api } from "../api"
 import SocialShare from "../components/SocialShare"
 
-const BASE = "https://pesapips-backend.onrender.com"
+const BASE = API_URL
 const C = {
   bg:"#171a20", surface:"#1f2330", surface2:"#262c3a",
   border:"rgba(255,255,255,0.07)", border2:"rgba(255,255,255,0.12)",

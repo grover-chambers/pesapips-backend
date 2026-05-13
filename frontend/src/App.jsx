@@ -861,7 +861,7 @@ function BlogPreview() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch("https://pesapips-backend.onrender.com/blog/published?limit=3")
+      fetch(`${import.meta.env.VITE_API_URL || "https://pesapips-backend.onrender.com"}/blog/published?limit=3`)
       .then(res => res.json())
       .then(data => {
         setPosts(data.posts?.slice(0, 3) || [])

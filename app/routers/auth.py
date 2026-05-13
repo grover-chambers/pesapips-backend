@@ -6,10 +6,9 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut, UserLogin, Token
 from app.dependencies import get_current_user
-from app.core.email import email_welcome, email_password_reset
-from app.models.password_reset import PasswordResetToken
-from datetime import datetime, timedelta
 from app.core.email import email_welcome, email_password_reset, send_email
+from app.models.password_reset import PasswordResetToken
+from datetime import datetime, timedelta, timezone
 import secrets
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -31,9 +30,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
     try:
         email_welcome(user.email, user.email.split('@')[0])
-        print(f"Welcome email sent to {user.email}")
-    except Exception as e:
-        print(f"Welcome email failed: {e}")
+    except Exception:
+        pass
 
     return user
 
@@ -55,16 +53,13 @@ def forgot_password(
     email: str,
     db: Session = Depends(get_db)
 ):
-    """Request a password reset email"""
     user = db.query(User).filter(User.email == email).first()
     if not user:
         return {"message": "If your email is registered, you will receive a password reset link."}
 
-    # Generate reset token
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
-    # Store token
     reset = PasswordResetToken(
         user_id=user.id,
         token=token,
@@ -74,13 +69,12 @@ def forgot_password(
     db.add(reset)
     db.commit()
 
-    # Send email with reset link
     reset_link = f"https://pesapips.vercel.app/reset-password?token={token}"
     html = f"""
-        <h2>Reset your PesaPips password</h2>
-        <p>Click the link below to reset your password. This link expires in 24 hours.</p>
-        <p><a href="{reset_link}" class="btn">Reset Password →</a></p>
-        <p>If you didn't request this, ignore this email.</p>
+    <h2>Reset your PesaPips password</h2>
+    <p>Click the link below to reset your password. This link expires in 24 hours.</p>
+    <p><a href="{reset_link}" class="btn">Reset Password →</a></p>
+    <p>If you didn't request this, ignore this email.</p>
     """
     send_email(email, "Reset your PesaPips password", html)
 
@@ -93,10 +87,9 @@ def reset_password(
     new_password: str,
     db: Session = Depends(get_db)
 ):
-    """Reset password using a valid token"""
     reset = db.query(PasswordResetToken).filter(
         PasswordResetToken.token == token,
-        PasswordResetToken.expires_at > datetime.utcnow(),
+        PasswordResetToken.expires_at > datetime.now(timezone.utc),
         PasswordResetToken.used == False
     ).first()
 
@@ -107,33 +100,45 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=400, detail="User not found")
 
-    # Update password
     user.hashed_password = hash_password(new_password)
     reset.used = True
     db.commit()
 
-    email_password_reset(user.email, user.display_name or user.email, new_password)
-
     return {"message": "Password reset successful. You can now log in with your new password."}
+
+
+class ChangePasswordPayload(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class UpdateProfilePayload(BaseModel):
+    display_name: str = None
+
+
+class NotificationPrefsPayload(BaseModel):
+    email_trades: bool = True
+    email_signals: bool = True
+    email_news: bool = True
+    push_trades: bool = True
+    push_signals: bool = True
 
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
     return {
-        "id":                current_user.id,
-        "email":             current_user.email,
-        "display_name":      current_user.display_name if hasattr(current_user, "display_name") else None,
-        "subscription_plan": current_user.subscription_plan if hasattr(current_user, "subscription_plan") and current_user.subscription_plan else "free",
-        "is_active":         current_user.is_active if hasattr(current_user, "is_active") else True,
-        "is_admin":          current_user.is_admin if hasattr(current_user, "is_admin") else False,
-        "is_verified":       current_user.is_verified if hasattr(current_user, "is_verified") else False,
-        "points_balance":    current_user.points_balance if hasattr(current_user, "points_balance") and current_user.points_balance is not None else 0,
-        "created_at":        current_user.created_at.isoformat() if hasattr(current_user, "created_at") and current_user.created_at else None,
-        "onboarded":         current_user.onboarded if hasattr(current_user, "onboarded") else False,
+        "id": current_user.id,
+        "email": current_user.email,
+        "display_name": current_user.display_name,
+        "subscription_plan": current_user.subscription_plan or "free",
+        "is_active": current_user.is_active,
+        "is_admin": current_user.is_admin,
+        "is_verified": current_user.is_verified,
+        "points_balance": current_user.points_balance or 0,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        "onboarded": current_user.onboarded or False,
+        "notification_prefs": current_user.notification_prefs if hasattr(current_user, "notification_prefs") and current_user.notification_prefs else {},
     }
-class ChangePasswordPayload(BaseModel):
-    current_password: str
-    new_password: str
 
 
 @router.post("/change-password")
@@ -142,7 +147,6 @@ def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.core.security import verify_password, hash_password
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     if len(payload.new_password) < 8:
@@ -154,14 +158,12 @@ def change_password(
 
 @router.patch("/me")
 def update_profile(
-    payload: dict,
+    payload: UpdateProfilePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    allowed = {"display_name"}
-    for k, v in payload.items():
-        if k in allowed and hasattr(current_user, k):
-            setattr(current_user, k, v)
+    if payload.display_name is not None:
+        current_user.display_name = payload.display_name
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -169,14 +171,23 @@ def update_profile(
 
 @router.post("/notifications")
 def save_notifications(
-    payload: dict,
+    payload: NotificationPrefsPayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Store notification prefs on user — add column if needed
     if hasattr(current_user, "notification_prefs"):
-        current_user.notification_prefs = payload
+        import json
+        current_user.notification_prefs = json.dumps(payload.model_dump())
         db.commit()
     return {"message": "Preferences saved"}
 
 
+@router.post("/onboarding/complete")
+def complete_onboarding(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.onboarded = True
+    db.commit()
+    db.refresh(current_user)
+    return {"message": "Onboarding completed", "onboarded": True}

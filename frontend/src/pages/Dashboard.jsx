@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import axios from "axios"
+import { api } from "../api"
 
-const API = "https://pesapips-backend.onrender.com"
+const API = import.meta.env.VITE_API_URL || "https://pesapips-backend.onrender.com"
 
 const C = {
   bg:       "#171a20",

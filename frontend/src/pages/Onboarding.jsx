@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import axios from "axios"
-
-const BASE = "https://pesapips-backend.onrender.com"
+import { api } from "../api"
 
 function getToken() {
   return localStorage.getItem("pp_token") || ""
@@ -10,7 +8,7 @@ function getToken() {
 
 async function completeOnboarding() {
   try {
-    await axios.post(`${BASE}/auth/onboarding/complete`, {}, {
+    await api.post(`/auth/onboarding/complete`, {}, {
       headers: { Authorization: `Bearer ${getToken()}` }
     })
     return true
@@ -20,7 +18,7 @@ async function completeOnboarding() {
 }
 
 async function getMe() {
-  const res = await axios.get(`${BASE}/auth/me?_=${Date.now()}`, {
+  const res = await api.get(`/auth/me?_=${Date.now()}`, {
     headers: { Authorization: `Bearer ${getToken()}`, "Cache-Control": "no-cache" }
   })
   return res.data
@@ -101,7 +99,7 @@ export default function Onboarding() {
     await completeOnboarding()
     // Verify it saved before redirecting
     try {
-      const me = await axios.get(`${BASE}/auth/me?_=${Date.now()}`, {
+      const me = await api.get(`/auth/me?_=${Date.now()}`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       })
       if (me.data.onboarded) {

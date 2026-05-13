@@ -3,7 +3,7 @@ amqp==5.3.1
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
-bcrypt==4.0.1
+bcrypt==4.2.1
 beautifulsoup4==4.14.3
 billiard==4.2.4
 celery==5.6.2
@@ -38,7 +38,6 @@ numba==0.61.2
 numpy==2.2.6
 packaging==26.0
 pandas==3.0.1
-passlib==1.7.4
 peewee==4.0.2
 platformdirs==4.9.4
 pluggy==1.6.0

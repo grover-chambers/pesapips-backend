@@ -162,32 +162,8 @@ def _twelve_batch_prices(symbols: list) -> dict:
 # ── Yahoo fallback ────────────────────────────────────────────────────────────
 
 def _yahoo_candles(symbol: str, timeframe: str, periods: int) -> Optional[pd.DataFrame]:
-    try:
-        ticker = YAHOO_MAP.get(symbol, symbol)
-        yf_period, yf_interval = TIMEFRAME_MAP.get(timeframe, ("5d", "5m"))
-        df = yf.download(ticker, period=yf_period, interval=yf_interval,
-                         progress=False, auto_adjust=True)
-        if df is None or df.empty:
-            return None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        df.columns = [c.lower() for c in df.columns]
-        df = df.rename(columns={"vol": "volume"})
-        for col in ["open","high","low","close"]:
-            if col not in df.columns:
-                return None
-        if "volume" not in df.columns:
-            df["volume"] = 0
-        df = df[["open","high","low","close","volume"]].dropna()
-        if timeframe == "H4":
-            df = df.resample("4h").agg({
-                "open": "first", "high": "max",
-                "low": "min", "close": "last", "volume": "sum"
-            }).dropna()
-        return df.tail(periods)
-    except Exception as e:
-        print(f"[yahoo] candles failed for {symbol}: {e}")
-        return None
+    """Yahoo Finance fallback — currently disabled. Use Twelve Data instead."""
+    return None
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -196,13 +172,24 @@ def get_market_data(
     symbol: str = "XAUUSD",
     timeframe: str = "M5",
     periods: int = 200,
+    allow_synthetic: bool = True,
 ) -> Optional[pd.DataFrame]:
-    """Twelve Data first, synthetic last resort. Yahoo removed — unreliable."""
+    """Twelve Data first, synthetic only for display — NOT for signals."""
     df = _twelve_candles(symbol, timeframe, periods)
     if df is not None and not df.empty:
+        df._data_source = "twelve_data"
         return df
-    print(f"[market_data] Twelve Data failed for {symbol}, using synthetic")
-    return _synthetic(periods=periods)
+    if allow_synthetic:
+        print(f"[market_data] WARNING: Twelve Data failed for {symbol}, using synthetic — signals should be blocked")
+        synth = _synthetic(periods=periods)
+        synth._data_source = "synthetic"
+        return synth
+    print(f"[market_data] Twelve Data failed for {symbol}, synthetic disabled — returning None")
+    return None
+
+
+def is_synthetic_data(df: pd.DataFrame) -> bool:
+    return getattr(df, "_data_source", None) == "synthetic"
 
 
 def get_current_price(symbol: str) -> Optional[float]:

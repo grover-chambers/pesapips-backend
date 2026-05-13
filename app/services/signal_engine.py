@@ -1,6 +1,7 @@
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
+from typing import Optional
 
 AVAILABLE_INDICATORS = {
     "EMA":       {"params": ["ema_fast", "ema_mid", "ema_slow"], "desc": "EMA trend filter + pullback entry"},
@@ -750,8 +751,46 @@ class SignalEngine:
                 "indicators_hit": 0, "trending": trending}
 
 
-def run_signal(df: pd.DataFrame, params: dict) -> dict:
-    return SignalEngine(params).generate_signal(df)
+def run_signal(df: pd.DataFrame, params: dict, h4_trend: Optional[str] = None) -> dict:
+    result = SignalEngine(params).generate_signal(df)
+    if h4_trend and result.get("signal") in ("BUY", "SELL"):
+        signal = result["signal"]
+        if h4_trend == "bearish" and signal == "BUY":
+            result["signal"] = "HOLD"
+            result["confidence"] *= 0.3
+            result["reason"] = f"[H4 filter: counter-trend BUY blocked] {result.get('reason', '')}"
+            result["h4_filter"] = "blocked_counter_trend"
+        elif h4_trend == "bullish" and signal == "SELL":
+            result["signal"] = "HOLD"
+            result["confidence"] *= 0.3
+            result["reason"] = f"[H4 filter: counter-trend SELL blocked] {result.get('reason', '')}"
+            result["h4_filter"] = "blocked_counter_trend"
+        else:
+            result["h4_filter"] = "aligned_with_h4"
+            result["confidence"] = min(1.0, result["confidence"] * 1.15)
+    return result
+
+
+def check_h4_trend(df_h4: pd.DataFrame) -> Optional[str]:
+    if df_h4 is None or df_h4.empty or len(df_h4) < 50:
+        return None
+    try:
+        import pandas_ta as ta
+        close = df_h4["close"]
+        ema21 = ta.ema(close, length=21)
+        ema50 = ta.ema(close, length=50)
+        if ema21 is None or ema50 is None:
+            return None
+        e21 = float(ema21.iloc[-1])
+        e50 = float(ema50.iloc[-1])
+        price = float(close.iloc[-1])
+        if e21 > e50 and price > e21:
+            return "bullish"
+        elif e21 < e50 and price < e21:
+            return "bearish"
+        return None
+    except Exception:
+        return None
 
 
 def get_available_indicators() -> dict:

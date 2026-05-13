@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.services.signal_engine import run_signal
-from app.services.market_data import get_market_data
+from app.services.signal_engine import run_signal, check_h4_trend
+from app.services.market_data import get_market_data, is_synthetic_data
 from app.mt5_bridge.socket_client import mt5 as mt5_bridge
 from app.services.backtester import run_backtest
 from app.models.user import User
@@ -10,6 +10,53 @@ from app.dependencies import get_current_user
 from app.core.database import get_db
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime, timezone, timedelta
+
+
+def _check_signal_limit(user: User, db: Session) -> None:
+    """Server-side rate limit: free users get 5 signal runs/day."""
+    if user.subscription_plan not in ("free", None, ""):
+        return
+    from app.models.trade import Trade
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    runs_today = db.query(Trade).filter(
+        Trade.user_id == user.id,
+        Trade.opened_at >= today_start,
+    ).count()
+    # Use a simple counter approach — check a lightweight table
+    # For now, use the PerformanceLog or a simple approach
+    from sqlalchemy import text
+    try:
+        with db.bind.connect() as conn:
+            result = conn.execute(text(
+                "SELECT COUNT(*) FROM signal_runs WHERE user_id = :uid AND run_at >= :today"
+            ), {"uid": user.id, "today": today_start})
+            count = result.scalar() or 0
+        if count >= 5:
+            raise HTTPException(
+                status_code=429,
+                detail="Daily signal limit reached (5/day on Free plan). Upgrade to Pro for unlimited signals."
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+
+def _record_signal_run(user_id: int, db: Session) -> None:
+    from sqlalchemy import text
+    try:
+        with db.bind.connect() as conn:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS signal_runs "
+                "(id SERIAL PRIMARY KEY, user_id INTEGER, run_at TIMESTAMP WITH TIME ZONE DEFAULT NOW())"
+            ))
+            conn.execute(text(
+                "INSERT INTO signal_runs (user_id) VALUES (:uid)"
+            ), {"uid": user_id})
+            conn.commit()
+    except Exception:
+        pass
 
 
 def get_candles(symbol: str, timeframe: str, periods: int = 200):
@@ -53,15 +100,42 @@ DEFAULT_PARAMS = {
 def run_signal_now(
     payload: SignalRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    _check_signal_limit(current_user, db)
     params = payload.params or DEFAULT_PARAMS
     df = get_candles(symbol=payload.asset, timeframe=payload.timeframe, periods=500)
-    result = run_signal(df, params)
+
+    if df is None or df.empty:
+        return {"asset": payload.asset, "timeframe": payload.timeframe,
+                "signal": "HOLD", "confidence": 0.0, "reason": "No market data available",
+                "latest_price": 0, "data_source": "none"}
+
+    if is_synthetic_data(df):
+        return {"asset": payload.asset, "timeframe": payload.timeframe,
+                "signal": "HOLD", "confidence": 0.0,
+                "reason": "BLOCKED: Signal generated on synthetic/fake data. Real market data (Twelve Data) is unavailable. No trading decisions should be made.",
+                "latest_price": round(float(df.iloc[-1]["close"]), 2) if not df.empty else 0,
+                "data_source": "synthetic", "synthetic_warning": True}
+
+    h4_trend = None
+    if params.get("use_mtf_filter", True):
+        try:
+            df_h4 = get_market_data(symbol=payload.asset, timeframe="H4", periods=100, allow_synthetic=False)
+            if df_h4 is not None and not df_h4.empty:
+                h4_trend = check_h4_trend(df_h4)
+        except Exception:
+            pass
+
+    result = run_signal(df, params, h4_trend=h4_trend)
     latest_price = round(float(df.iloc[-1]["close"]), 2) if not df.empty else 0
+    _record_signal_run(current_user.id, db)
     return {
-        "asset":        payload.asset,
-        "timeframe":    payload.timeframe,
+        "asset": payload.asset,
+        "timeframe": payload.timeframe,
         "latest_price": latest_price,
+        "h4_trend": h4_trend,
+        "data_source": "live",
         **result,
     }
 
@@ -212,10 +286,26 @@ def market_intel(
         regime["tier_limited"] = True
         regime["upgrade_msg"] = "Upgrade to Elite to see historical similarity analysis."
 
-    if user_tier < 3:  # not platinum — no auto-switching
+    if user_tier < 3:
         regime["auto_switch"] = False
     else:
         regime["auto_switch"] = True
+        active_us = db.query(UserStrategy).filter(
+            UserStrategy.user_id == current_user.id,
+            UserStrategy.is_active == True
+        ).first()
+        if active_us and regime.get("top_strategies"):
+            best_fit = regime["top_strategies"][0]
+            if best_fit.get("fit_label") == "Ideal" and best_fit.get("can_use"):
+                best_strategy_id = best_fit["strategy_id"]
+                if best_strategy_id != active_us.strategy_id:
+                    regime["auto_switch_available"] = {
+                        "current_strategy_id": active_us.strategy_id,
+                        "recommended_strategy_id": best_strategy_id,
+                        "recommended_strategy_name": best_strategy.get("name", ""),
+                        "current_regime": regime["regime"],
+                        "fit_label": best_fit["fit_label"],
+                    }
 
     regime["plan"] = plan
     return regime

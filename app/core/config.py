@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, List
+
 
 class Settings(BaseSettings):
     DATABASE_URL: str
@@ -19,12 +20,28 @@ class Settings(BaseSettings):
     SMTP_FROM: str = "PesaPips <noreply@pesapips.com>"
     # Market Data
     TWELVE_DATA_KEY: Optional[str] = ""
+    # CORS
+    CORS_ORIGINS: str = "https://pesapips.vercel.app,https://pesapips.com,http://localhost:5173,http://localhost:3000"
+    # MT5 Bridge Path
+    MT5_BRIDGE_PATH: Optional[str] = None
+    # Telegram Bot
+    TELEGRAM_BOT_TOKEN: Optional[str] = ""
+    TELEGRAM_CHAT_ID: Optional[str] = ""
+    # Flutterwave / M-Pesa
+    FLW_SECRET_KEY: Optional[str] = ""
+    FLW_PUBLIC_KEY: Optional[str] = ""
+
+    @property
+    def cors_origin_list(self) -> List[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     class Config:
         env_file = ".env"
 
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
 
 settings = get_settings()

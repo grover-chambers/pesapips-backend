@@ -1,12 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import axios from "axios"
-
-const api = axios.create({ baseURL: "https://pesapips-backend.onrender.com" })
-api.interceptors.request.use(cfg => {
-  const token = localStorage.getItem("pp_token")
-  if (token) cfg.headers.Authorization = `Bearer ${token}`
-  return cfg
-})
+import { api } from "../api"
 
 // ── DESIGN TOKENS ─────────────────────────────────────────────────────────────
 const C = {

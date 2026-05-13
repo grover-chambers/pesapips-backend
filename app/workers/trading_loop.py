@@ -6,7 +6,7 @@ from app.services.signal_engine import run_signal
 from app.services.risk_manager import RiskManager
 from app.services.market_data import get_market_data
 from app.models.trade import Trade
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def run_trading_loop():
                         tp=tp,
                         status="open",
                         strategy_name=us.strategy.name,
-                        opened_at=datetime.utcnow(),
+                        opened_at=datetime.now(timezone.utc),
                     )
                     db.add(trade)
                     db.commit()

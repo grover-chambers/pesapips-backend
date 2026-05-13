@@ -2,11 +2,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
+connect_args = {}
+if "sslmode=require" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
+    connect_args["sslmode"] = "require"
+
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    connect_args=connect_args,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

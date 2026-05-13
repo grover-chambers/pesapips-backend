@@ -239,31 +239,34 @@ def update_user(
 @router.post("/users/{user_id}/reset-password")
 def admin_reset_password(
     user_id: int,
-    payload: dict,
-    db:      Session = Depends(get_db),
-    admin:   User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 
-    new_pw = payload.get("new_password", "")
-    if len(new_pw) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-
+    import secrets as _secrets
     from app.core.security import hash_password
     from app.core.email import email_password_reset
-    u.hashed_password = hash_password(new_pw)
+    from app.models.password_reset import PasswordResetToken
+
+    token = _secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    reset = PasswordResetToken(user_id=u.id, token=token, expires_at=expires_at, used=False)
+    db.add(reset)
     db.commit()
+
+    reset_link = f"https://pesapips.vercel.app/reset-password?token={token}"
     try:
         email_password_reset(
             to=u.email,
             name=u.display_name or u.email.split("@")[0],
-            new_password=new_pw,
+            reset_link=reset_link,
         )
     except Exception:
         pass
-    return {"message": f"Password reset for {u.email}"}
+    return {"message": f"Password reset link sent to {u.email}"}
 
 
 # ── FEEDBACK INBOX ────────────────────────────────────────────────────────────
@@ -657,152 +660,6 @@ def course_stats(
     return result
 
 
-# ── STRATEGY MANAGEMENT ───────────────────────────────────────────────────────
-
-class StrategyCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    default_params: dict
-    is_public: bool = True
-
-
-@router.get("/strategies")
-def admin_list_strategies(
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    return db.query(Strategy).order_by(Strategy.id).all()
-
-
-@router.post("/strategies")
-def admin_create_strategy(
-    payload: StrategyCreate,
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    s = Strategy(
-        name=payload.name,
-        description=payload.description,
-        default_params=payload.default_params,
-        is_public=payload.is_public,
-    )
-    db.add(s)
-    db.commit()
-    db.refresh(s)
-    return s
-
-
-@router.patch("/strategies/{strategy_id}")
-def admin_update_strategy(
-    strategy_id: int,
-    payload: dict,
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    s = db.query(Strategy).filter(Strategy.id == strategy_id).first()
-    if not s:
-        raise HTTPException(status_code=404, detail="Strategy not found")
-    if "name" in payload:        s.name = payload["name"]
-    if "description" in payload: s.description = payload["description"]
-    if "is_public" in payload:   s.is_public = payload["is_public"]
-    if "default_params" in payload:
-        s.default_params = payload["default_params"]
-    db.commit()
-    db.refresh(s)
-    return s
-
-
-@router.delete("/strategies/{strategy_id}")
-def admin_delete_strategy(
-    strategy_id: int,
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    s = db.query(Strategy).filter(Strategy.id == strategy_id).first()
-    if not s:
-        raise HTTPException(status_code=404, detail="Strategy not found")
-    db.delete(s)
-    db.commit()
-    return {"deleted": True}
-
-
-# ── STRATEGY MANAGEMENT ───────────────────────────────────────────────────────
-
-class StrategyCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    default_params: dict
-    is_public: bool = True
-
-
-@router.get("/strategies")
-def admin_list_strategies(
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    return db.query(Strategy).order_by(Strategy.id).all()
-
-
-@router.post("/strategies")
-def admin_create_strategy(
-    payload: StrategyCreate,
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    s = Strategy(
-        name=payload.name,
-        description=payload.description,
-        default_params=payload.default_params,
-        is_public=payload.is_public,
-    )
-    db.add(s)
-    db.commit()
-    db.refresh(s)
-    return s
-
-
-@router.patch("/strategies/{strategy_id}")
-def admin_update_strategy(
-    strategy_id: int,
-    payload: dict,
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    s = db.query(Strategy).filter(Strategy.id == strategy_id).first()
-    if not s:
-        raise HTTPException(status_code=404, detail="Strategy not found")
-    if "name" in payload:        s.name = payload["name"]
-    if "description" in payload: s.description = payload["description"]
-    if "is_public" in payload:   s.is_public = payload["is_public"]
-    if "default_params" in payload:
-        s.default_params = payload["default_params"]
-    db.commit()
-    db.refresh(s)
-    return s
-
-
-@router.delete("/strategies/{strategy_id}")
-def admin_delete_strategy(
-    strategy_id: int,
-    db:    Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.models.strategy import Strategy
-    s = db.query(Strategy).filter(Strategy.id == strategy_id).first()
-    if not s:
-        raise HTTPException(status_code=404, detail="Strategy not found")
-    db.delete(s)
-    db.commit()
-    return {"deleted": True}
-
-
 # ── ADMIN MESSAGING ────────────────────────────────────────────────────────────
 
 class MessageCreate(BaseModel):
@@ -834,7 +691,7 @@ def send_message(data: MessageCreate, db: Session = Depends(get_db), admin=Depen
         users = db.query(User).filter(User.is_active == True).all()
         for u in users:
             m = Message(user_id=u.id, subject=data.subject, body=data.body,
-                        from_name=data.from_name, broadcast=True)
+                from_name=data.from_name, broadcast=True)
             db.add(m)
         db.commit()
         return {"ok": True, "sent_to": len(users), "broadcast": True}
@@ -854,7 +711,7 @@ def send_notification(data: NotificationCreate, db: Session = Depends(get_db), a
         users = db.query(User).filter(User.is_active == True).all()
         for u in users:
             n = Notification(user_id=u.id, type=data.type,
-                             title=data.title, message=data.message)
+                title=data.title, message=data.message)
             db.add(n)
         db.commit()
         return {"ok": True, "sent_to": len(users), "broadcast": True}
@@ -903,7 +760,7 @@ def approve_payment(payment_id: int, db: Session = Depends(get_db), admin=Depend
     
     u.subscription_plan = p.plan
     p.status = "approved"
-    p.approved_at = datetime.utcnow()
+    p.approved_at = datetime.now(timezone.utc)
 
     # Notify user
     n = Notification(user_id=u.id, type="system",
