@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
 connect_args = {}
-if "sslmode=require" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
+if "neon.tech" in settings.DATABASE_URL and "sslmode=require" not in settings.DATABASE_URL:
     connect_args["sslmode"] = "require"
 
 engine = create_engine(

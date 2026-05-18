@@ -38,6 +38,7 @@ numba==0.61.2
 numpy==2.2.6
 packaging==26.0
 pandas==3.0.1
+pandas-ta==0.4.71b0
 peewee==4.0.2
 platformdirs==4.9.4
 pluggy==1.6.0

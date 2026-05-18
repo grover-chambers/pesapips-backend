@@ -634,120 +634,106 @@ function Features() {
 
 // ── PRICING ────────────────────────────────────────────────────────────────
 function Pricing() {
-  const plans = [
-    {
-      name:"Free", price:"Free", period:"",
-      desc:"Start trading with AI signals. No card needed.",
-      features:[
-        "1 MT5 account",
-        "1 active strategy (default or library)",
-        "Build 1 custom strategy",
-        "Live trade metrics",
-        "5 AI signal runs/day",
-        "Backtest (100 candles)",
-        "Community support",
-      ],
-      cta:"Get started free", highlight:false, color:"#9aa0b0",
-    },
-    {
-      name:"Pro", price:"KSh 2,500", period:"/month",
-      desc:"Full automation for active traders who want the edge.",
-      features:[
-        "3 MT5 accounts",
-        "Default + 1 library strategy",
-        "Build up to 3 custom strategies",
-        "Trading Journal",
-        "Backtest analytics (500 candles)",
-        "Unlimited AI signal runs",
-        "Email support",
-      ],
-      cta:"Start Pro", highlight:true, color:"#5b9cf6",
-    },
-    {
-      name:"Elite", price:"KSh 5,000", period:"/month",
-      desc:"For serious traders managing multiple strategies.",
-      features:[
-        "5 MT5 accounts",
-        "Default + library + 1 custom strategy",
-        "Build up to 5 custom strategies",
-        "Full performance analytics",
-        "Backtest (1000 candles)",
-        "Priority support",
-      ],
-      cta:"Go Elite", highlight:false, color:"#d4a843",
-    },
-    {
-      name:"Platinum", price:"KSh 9,000", period:"/month",
-      desc:"Unlimited everything. For professional traders.",
-      features:[
-        "Unlimited MT5 accounts",
-        "Unlimited strategy combinations",
-        "Unlimited custom strategies",
-        "Full analytics, no restrictions",
-        "Backtest (2000 candles)",
-        "Dedicated account manager",
-        "API access",
-      ],
-      cta:"Go Platinum", highlight:false, color:"#e2c4f0",
-    },
-  ]
+ const [annual, setAnnual] = useState(false)
+ const monthly = [
+ { name:"Free", price:"Free", period:"", desc:"Start trading with AI signals. No card needed.", features:[
+ "1 MT5 account","1 active strategy","Build 1 custom strategy","Live trade metrics",
+ "5 AI signal runs/day","Backtest (100 candles)","Community support",
+ ], cta:"Get started free", highlight:false, color:"#9aa0b0" },
+ { name:"Pro", price:"KSh 2,500", period:"/month", annualPrice:"KSh 25,000", annualPeriod:"/year", annualSave:"Save KSh 5,000", desc:"Full automation for active traders who want the edge.", features:[
+ "3 MT5 accounts","Default + 1 library strategy","Build up to 3 custom strategies","Trading Journal",
+ "Backtest analytics (500 candles)","Unlimited AI signal runs","Telegram trade alerts","News filter","Email support",
+ ], cta:"Start Pro", highlight:true, color:"#5b9cf6" },
+ { name:"Elite", price:"KSh 5,000", period:"/month", annualPrice:"KSh 50,000", annualPeriod:"/year", annualSave:"Save KSh 10,000", desc:"For serious traders managing multiple strategies.", features:[
+ "5 MT5 accounts","Default + library + 1 custom strategy","Build up to 5 custom strategies",
+ "Full performance analytics","Backtest (1000 candles)","Circuit breaker protection",
+ "Multi-timeframe confluence","Daily AI market briefing","Priority support",
+ ], cta:"Go Elite", highlight:false, color:"#d4a843" },
+ { name:"Platinum", price:"KSh 9,000", period:"/month", annualPrice:"KSh 90,000", annualPeriod:"/year", annualSave:"Save KSh 18,000", desc:"Unlimited everything. For professional traders.", features:[
+ "Unlimited MT5 accounts","Unlimited strategy combinations","Unlimited custom strategies",
+ "Full analytics, no restrictions","Backtest (2000 candles)","Auto-regime strategy switching",
+ "Trailing stop & breakeven","Forward-test audit trail","Paper trading",
+ "Referral rewards (1 month free)","Dedicated account manager","API access",
+ ], cta:"Go Platinum", highlight:false, color:"#e2c4f0" },
+ ]
 
-  return (
-    <div style={{ background:`rgba(255,255,255,0.01)`, padding:"100px 0", borderTop:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}` }}>
-      <Section id="pricing">
-        <div style={{ textAlign:"center", marginBottom:64 }}>
-          <SectionLabel>Pricing</SectionLabel>
-          <H2>Simple, honest pricing</H2>
-          <p style={{ fontFamily:C.sans, fontSize:17, color:C.text2 }}>No hidden fees. No performance cuts. Cancel any time.</p>
-        </div>
+ return (
+ <div style={{ background:`rgba(255,255,255,0.01)`, padding:"100px 0", borderTop:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}` }}>
+ <Section id="pricing">
+ <div style={{ textAlign:"center", marginBottom:64 }}>
+ <SectionLabel>Pricing</SectionLabel>
+ <H2>Simple, honest pricing</H2>
+ <p style={{ fontFamily:C.sans, fontSize:17, color:C.text2 }}>No hidden fees. No performance cuts. Cancel any time.</p>
+ <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12, marginTop:24 }}>
+ <span style={{ fontFamily:C.sans, fontSize:14, color: annual ? C.text3 : C.text, transition:"0.2s" }}>Monthly</span>
+ <button onClick={()=>setAnnual(!annual)} style={{
+ width:48, height:26, borderRadius:13, border:"none", cursor:"pointer",
+ background: annual ? C.gold : C.border, position:"relative", transition:"0.2s",
+ }}>
+ <div style={{
+ width:20, height:20, borderRadius:10, background:"#fff",
+ position:"absolute", top:3, left: annual ? 25 : 3, transition:"0.2s",
+ }}/>
+ </button>
+ <span style={{ fontFamily:C.sans, fontSize:14, color: annual ? C.text : C.text3, transition:"0.2s" }}>
+ Annual <span style={{ color:C.green, fontSize:12, fontWeight:700, marginLeft:4 }}>SAVE 17%</span>
+ </span>
+ </div>
+ </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:20, alignItems:"start" }}>
-          {plans.map((p,i)=>(
-            <div key={i} style={{
-              background: p.highlight ? `rgba(212,168,67,0.05)` : C.surface,
-              border:`1px solid ${p.highlight ? "rgba(212,168,67,0.35)" : C.border}`,
-              borderRadius:16, padding:"36px 28px",
-              position:"relative",
-            }}>
-              {p.highlight && (
-                <div style={{
-                  position:"absolute", top:-13, left:"50%", transform:"translateX(-50%)",
-                  background:C.gold, color:"#0d0f14",
-                  fontFamily:C.mono, fontWeight:700, fontSize:10,
-                  padding:"4px 18px", borderRadius:20, letterSpacing:"0.12em", whiteSpace:"nowrap",
-                }}>MOST POPULAR</div>
-              )}
-              <div style={{ fontFamily:C.mono, fontSize:10, color:p.color||C.text3, letterSpacing:"0.15em", marginBottom:8 }}>{p.name.toUpperCase()}</div>
-              <div style={{ marginBottom:8 }}>
-                <span style={{ fontFamily:C.mono, fontSize:30, fontWeight:700, color:p.color||C.text }}>{p.price}</span>
-                <span style={{ fontFamily:C.sans, fontSize:14, color:C.text3 }}>{p.period}</span>
-              </div>
-              <p style={{ fontFamily:C.sans, fontSize:14, color:C.text2, marginBottom:28, lineHeight:1.6 }}>{p.desc}</p>
-              <ul style={{ listStyle:"none", marginBottom:32 }}>
-                {p.features.map((f,j)=>(
-                  <li key={j} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:11, fontFamily:C.sans, fontSize:14, color:C.text2 }}>
-                    <span style={{ color:C.green, fontSize:13, flexShrink:0 }}>✓</span>{f}
-                  </li>
-                ))}
-              </ul>
-              <a href="/register" style={{
-                display:"block", textAlign:"center",
-                padding:"13px", borderRadius:8,
-                fontFamily:C.sans, fontSize:15, fontWeight:700,
-                background:p.highlight?C.gold:"transparent",
-                border:p.highlight?"none":`1px solid ${C.border2}`,
-                color:p.highlight?"#0d0f14":C.text2,
-                textDecoration:"none", transition:"all 0.2s",
-              }}
-              onMouseEnter={e=>{e.currentTarget.style.opacity="0.85"}}
-              onMouseLeave={e=>{e.currentTarget.style.opacity="1"}}
-              >{p.cta}</a>
-            </div>
-          ))}
-        </div>
-      </Section>
-    </div>
-  )
+ <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:20, alignItems:"start" }}>
+ {monthly.map((p,i)=>(
+ <div key={i} style={{
+ background: p.highlight ? `rgba(212,168,67,0.05)` : C.surface,
+ border:`1px solid ${p.highlight ? "rgba(212,168,67,0.35)" : C.border}`,
+ borderRadius:16, padding:"36px 28px", position:"relative",
+ }}>
+ {p.highlight && (
+ <div style={{
+ position:"absolute", top:-13, left:"50%", transform:"translateX(-50%)",
+ background:C.gold, color:"#0d0f14",
+ fontFamily:C.mono, fontWeight:700, fontSize:10,
+ padding:"4px 18px", borderRadius:20, letterSpacing:"0.12em", whiteSpace:"nowrap",
+ }}>MOST POPULAR</div>
+ )}
+ <div style={{ fontFamily:C.mono, fontSize:10, color:p.color||C.text3, letterSpacing:"0.15em", marginBottom:8 }}>{p.name.toUpperCase()}</div>
+ <div style={{ marginBottom:4 }}>
+ <span style={{ fontFamily:C.mono, fontSize:30, fontWeight:700, color:p.color||C.text }}>
+ {annual && p.annualPrice ? p.annualPrice : p.price}
+ </span>
+ <span style={{ fontFamily:C.sans, fontSize:14, color:C.text3 }}>
+ {annual && p.annualPeriod ? p.annualPeriod : p.period}
+ </span>
+ </div>
+ {annual && p.annualSave && (
+ <div style={{ fontFamily:C.mono, fontSize:11, color:C.green, marginBottom:8 }}>{p.annualSave}</div>
+ )}
+ <p style={{ fontFamily:C.sans, fontSize:14, color:C.text2, marginBottom:28, lineHeight:1.6 }}>{p.desc}</p>
+ <ul style={{ listStyle:"none", marginBottom:32 }}>
+ {p.features.map((f,j)=>(
+ <li key={j} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:11, fontFamily:C.sans, fontSize:14, color:C.text2 }}>
+ <span style={{ color:C.green, fontSize:13, flexShrink:0 }}>✓</span>{f}
+ </li>
+ ))}
+ </ul>
+ <a href="/register" style={{
+ display:"block", textAlign:"center",
+ padding:"13px", borderRadius:8,
+ fontFamily:C.sans, fontSize:15, fontWeight:700,
+ background:p.highlight?C.gold:"transparent",
+ border:p.highlight?"none":`1px solid ${C.border2}`,
+ color:p.highlight?"#0d0f14":C.text2,
+ textDecoration:"none", transition:"all 0.2s",
+ }}
+ onMouseEnter={e=>{e.currentTarget.style.opacity="0.85"}}
+ onMouseLeave={e=>{e.currentTarget.style.opacity="1"}}
+ >{p.cta}</a>
+ </div>
+ ))}
+ </div>
+ </Section>
+ </div>
+ )
 }
 
 // ── REVIEWS ────────────────────────────────────────────────────────────────
