@@ -11,7 +11,9 @@ from app.dependencies import get_current_user
 from app.mt5_bridge.socket_client import mt5 as mt5_bridge, MT5Bridge
 from app.routers.ws_bridge import manager
 from datetime import datetime
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/trading", tags=["Trading"])
 
 # ── Candle cache — serves last known data when MT5 is offline (weekends) ──────
@@ -24,9 +26,9 @@ if _os.path.exists(_seed_path):
     try:
         with open(_seed_path) as _f:
             _candle_cache.update(_json.load(_f))
-        print(f"[candle cache] Loaded {len(_candle_cache)} pairs from seed")
-    except Exception as _e:
-        print(f"[candle cache] Seed load failed: {_e}")
+        logger.info("Loaded %d candle pairs from seed", len(_candle_cache))
+    except Exception:
+        logger.exception("Failed to load candle cache seed")
 
 
 
@@ -377,8 +379,8 @@ async def system_stats(
                 "login":   bal.get("login", ""),
                 "balance": bal.get("balance", 0),
             }
-        except:
-            pass
+        except Exception:
+            logger.debug("MT5 balance fetch failed for system stats", exc_info=True)
 
     # User's strategies
     from app.models.strategy import UserStrategy

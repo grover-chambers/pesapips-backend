@@ -73,9 +73,9 @@ def my_strategies(
 
 
 @router.patch("/{strategy_id}")
-def update_strategy(
+def patch_strategy(
     strategy_id: int,
-    payload: dict,
+    payload: UserStrategyUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -85,8 +85,8 @@ def update_strategy(
     ).first()
     if not us:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    if "custom_params" in payload:
-        us.custom_params = payload["custom_params"]
+    if payload.custom_params is not None:
+        us.custom_params = payload.custom_params
     db.commit()
     db.refresh(us)
     return us

@@ -11,3 +11,5 @@ from app.models.course import CourseModule, CourseLesson, CourseQuiz, UserProgre
 from app.models.admin import SupportTicket, TicketNote, Announcement
 
 from app.models.blog import BlogPost
+
+from app.models.prop_eval import PropEvalSettings, PropEvalSnapshot

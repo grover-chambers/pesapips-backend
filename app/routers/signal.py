@@ -11,6 +11,9 @@ from app.core.database import get_db
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _check_signal_limit(user: User, db: Session) -> None:
@@ -40,7 +43,7 @@ def _check_signal_limit(user: User, db: Session) -> None:
     except HTTPException:
         raise
     except Exception:
-        pass
+        logger.exception("Failed to check signal rate limit; allowing run")
 
 
 def _record_signal_run(user_id: int, db: Session) -> None:
@@ -56,11 +59,11 @@ def _record_signal_run(user_id: int, db: Session) -> None:
             ), {"uid": user_id})
             conn.commit()
     except Exception:
-        pass
+        logger.exception("Failed to record signal run for user %s", user_id)
 
 
 def get_candles(symbol: str, timeframe: str, periods: int = 200):
-    """Get candles from MT5 if connected, else fallback to Yahoo."""
+    """Get candles from MT5 if connected, else fallback to Twelve Data."""
     if mt5_bridge.is_connected():
         try:
             result = mt5_bridge._send({"action": "CANDLES", "symbol": symbol,
@@ -71,8 +74,8 @@ def get_candles(symbol: str, timeframe: str, periods: int = 200):
                 df["time"] = pd.to_datetime(df["t"], unit="s")
                 df = df.rename(columns={"o":"open","h":"high","l":"low","c":"close","v":"volume"})
                 return df.set_index("time")
-        except:
-            pass
+        except Exception:
+            logger.exception("MT5 candle fetch failed for %s %s", symbol, timeframe)
     return get_market_data(symbol=symbol, timeframe=timeframe, periods=periods)
 
 router = APIRouter(prefix="/signal", tags=["Signal"])

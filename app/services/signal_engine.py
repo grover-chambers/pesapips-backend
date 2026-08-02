@@ -2,6 +2,7 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 from typing import Optional
+from app.core.instruments import round_price
 
 AVAILABLE_INDICATORS = {
     "EMA":       {"params": ["ema_fast", "ema_mid", "ema_slow"], "desc": "EMA trend filter + pullback entry"},
@@ -205,7 +206,8 @@ class SignalEngine:
         else:
             sl_mult, tp_mult = 1.2, 2.8
         if atr > 0:
-            return round(atr * sl_mult, 2), round(atr * tp_mult, 2)
+            symbol = self.p.get("symbol", self.p.get("asset", "XAUUSD"))
+            return round_price(symbol, atr * sl_mult), round_price(symbol, atr * tp_mult)
         return float(self.p.get("sl_pips", 15)), float(self.p.get("tp_pips", 30))
 
     # ─────────────────────────────────────────────────────────────────────────

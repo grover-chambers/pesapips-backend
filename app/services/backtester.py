@@ -1,4 +1,5 @@
 import pandas as pd
+from app.core.instruments import get_pip_size, round_price
 from app.services.signal_engine import SignalEngine
 from app.services.risk_manager import RiskManager
 
@@ -30,10 +31,10 @@ def run_backtest(df: pd.DataFrame, params: dict) -> dict:
     balance = 10000.0
     initial_balance = balance
     risk_per_trade = float(params.get("risk_per_trade", 1.0))
-    pip_size = float(params.get("pip_size", 0.1))
 
     symbol = params.get("symbol", "XAUUSD")
     spread_pips = SPREAD_PIPS.get(symbol, SPREAD_PIPS["DEFAULT"])
+    pip_size = float(params["pip_size"]) if params.get("pip_size") else get_pip_size(symbol)
     spread_cost = spread_pips * pip_size
 
     cooldown_candles = 3
@@ -118,9 +119,9 @@ def run_backtest(df: pd.DataFrame, params: dict) -> dict:
 
         entry_price = price
         if signal == "BUY":
-            entry_price = round(price + spread_cost / 2, 2)
+            entry_price = round_price(symbol, price + spread_cost / 2)
         else:
-            entry_price = round(price - spread_cost / 2, 2)
+            entry_price = round_price(symbol, price - spread_cost / 2)
 
         rm = RiskManager(balance=balance, risk_per_trade=risk_per_trade)
         lot = rm.calculate_lot_size(sl_pips=atr_sl / pip_size)

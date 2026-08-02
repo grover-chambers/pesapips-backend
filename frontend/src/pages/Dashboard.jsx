@@ -5487,6 +5487,7 @@ function Settings({ user }) {
     { id: "security", label: "Security"       },
     { id: "notifs",   label: "Notifications"  },
     { id: "plan",     label: "Plan & Billing" },
+    { id: "prop",     label: "Prop Eval"      },
     { id: "system",   label: "System Stats"   },
     { id: "danger",   label: "Danger Zone"    },
   ]
@@ -5776,6 +5777,11 @@ function Settings({ user }) {
         </div>
       )}
 
+      {/* ── PROP EVAL TAB ── */}
+      {tab === "prop" && (
+        <PropEvalPanel user={user} />
+      )}
+
       {tab === "danger" && (
         <div style={{ maxWidth: 560 }}>
           <div style={{ background: C.surface, border: `1px solid ${C.red}30`, borderRadius: 14, padding: "28px" }}>
@@ -5808,6 +5814,222 @@ function Settings({ user }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+// ── PROP FIRM EVALUATION RULE BOOK ──────────────────────────────────
+// Lets the user configure the FTMO / FundedNext / custom rule book that
+// the local prop-eval agent enforces in code.
+function PropEvalPanel({ user }) {
+  const [provider, setProvider]       = useState("ftmo")
+  const [presets,  setPresets]        = useState({})
+  const [form,     setForm]           = useState({
+    phase: 1, account_size: 100000, profit_target_pct: 10, max_daily_loss_pct: 2,
+    max_total_drawdown_pct: 5, min_trading_days: 5, risk_per_trade_pct: 0.5,
+    max_open_trades: 2, max_consecutive_losses: 3, instruments: ["XAUUSD", "EURUSD"],
+    auto_execute: false, stop_on_daily_loss: true, news_guard_enabled: true,
+    hold_over_weekend: false, notes: "",
+  })
+  const [status,    setStatus]        = useState("")
+  const [loaded,    setLoaded]        = useState(false)
+  const [saved,     setSaved]         = useState(false)
+
+  // Load presets + the user's saved rule book on mount
+  useEffect(() => {
+    api.get("/prop-eval/presets")
+      .then(r => setPresets(r.data))
+      .catch(() => {})
+    api.get("/prop-eval/settings")
+      .then(r => {
+        const d = r.data
+        setProvider(d.provider || "ftmo")
+        setForm({
+          phase: d.phase || 1,
+          account_size: d.account_size || 100000,
+          profit_target_pct: d.profit_target_pct ?? 10,
+          max_daily_loss_pct: d.max_daily_loss_pct ?? 2,
+          max_total_drawdown_pct: d.max_total_drawdown_pct ?? 5,
+          min_trading_days: d.min_trading_days ?? 5,
+          risk_per_trade_pct: d.risk_per_trade_pct ?? 0.5,
+          max_open_trades: d.max_open_trades ?? 2,
+          max_consecutive_losses: d.max_consecutive_losses ?? 3,
+          instruments: d.instruments || ["XAUUSD", "EURUSD"],
+          auto_execute: !!d.auto_execute,
+          stop_on_daily_loss: d.stop_on_daily_loss !== false,
+          news_guard_enabled: d.news_guard_enabled !== false,
+          hold_over_weekend: !!d.hold_over_weekend,
+          notes: d.notes || "",
+        })
+        setLoaded(true)
+      })
+      .catch(() => setLoaded(true))
+  }, [])
+
+  const applyPreset = (p) => {
+    const preset = presets[p]
+    if (!preset) return
+    setProvider(p)
+    setForm(f => ({
+      ...f,
+      account_size: preset.account_size,
+      profit_target_pct: preset.profit_target_pct,
+      max_daily_loss_pct: preset.max_daily_loss_pct,
+      max_total_drawdown_pct: preset.max_total_drawdown_pct,
+      min_trading_days: preset.min_trading_days,
+      risk_per_trade_pct: preset.risk_per_trade_pct,
+      max_open_trades: preset.max_open_trades,
+      max_consecutive_losses: preset.max_consecutive_losses,
+      instruments: preset.instruments || f.instruments,
+    }))
+  }
+
+  const set = (k) => (e) => {
+    const v = e.target.type === "checkbox" ? e.target.checked : e.target.value
+    setForm(f => ({ ...f, [k]: v }))
+  }
+
+  const setInstruments = (e) => {
+    const val = e.target.value
+    setForm(f => ({ ...f, instruments: val.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) }))
+  }
+
+  const save = async () => {
+    setStatus("saving")
+    try {
+      await api.put("/prop-eval/settings", { ...form, provider })
+      setStatus("saved")
+      setSaved(true)
+      setTimeout(() => { setStatus(""); setSaved(false) }, 2500)
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail?.errors) ? detail.errors.join(" · ") : "failed to save"
+      setStatus("error:" + msg)
+    }
+  }
+
+  const num = (v) => {
+    const n = parseFloat(v)
+    return isNaN(n) ? 0 : n
+  }
+
+  const derived = {
+    target: (num(form.account_size) * (1 + num(form.profit_target_pct) / 100)).toFixed(2),
+    ddFloor: (num(form.account_size) * (1 - num(form.max_total_drawdown_pct) / 100)).toFixed(2),
+    dailyFloor: (num(form.account_size) * (1 - num(form.max_daily_loss_pct) / 100)).toFixed(2),
+  }
+
+  const field = (label, key, opts = {}) => (
+    <div>
+      <label style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.12em", display: "block", marginBottom: 7 }}>{label}</label>
+      <input
+        type={opts.type || "number"}
+        step={opts.step || "any"}
+        value={form[key]}
+        checked={opts.type === "checkbox" ? form[key] : undefined}
+        onChange={set(key)}
+        placeholder={opts.placeholder || ""}
+        style={{
+          ...inputStyle,
+          fontFamily: C.mono,
+          fontSize: 12,
+          ...(opts.type === "checkbox" ? { width: 18, height: 18, accentColor: C.gold, cursor: "pointer" } : {}),
+        }}
+      />
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: 900 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "28px" }}>
+          <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 6 }}>PROP FIRM RULE BOOK</div>
+          <div style={{ fontFamily: C.sans, fontSize: 12, color: C.text3, marginBottom: 20, lineHeight: 1.6 }}>
+            These rules are enforced in code by your local prop-eval agent — the AI proposes trades, the rule book decides. Adjust to match your firm's plan.
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.12em", display: "block", marginBottom: 7 }}>PROVIDER PRESET</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {["ftmo", "fundednext", "custom"].map(p => (
+                <button key={p} onClick={() => applyPreset(p)}
+                  style={{
+                    flex: 1, padding: "9px 0", borderRadius: 8, cursor: "pointer",
+                    background: provider === p ? C.gold : C.surface2,
+                    color: provider === p ? "#1a1405" : C.text3,
+                    border: `1px solid ${provider === p ? C.gold : C.border}`,
+                    fontFamily: C.mono, fontSize: 10, letterSpacing: "0.06em",
+                  }}>
+                  {p === "custom" ? "CUSTOM" : p.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginTop: 6 }}>
+              {provider === "ftmo" ? "FTMO standard 100K: 10% target / 2% daily / 5% max DD / 5 trading days" :
+               provider === "fundednext" ? "FundedNext 100K: 10% target / 3% daily / 6% max DD / 5 trading days" :
+               "Start from FTMO defaults and edit freely"}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {field("ACCOUNT SIZE (USD)", "account_size")}
+            {field("PHASE", "phase", { min: 1, step: 1 })}
+            {field("PROFIT TARGET (%)", "profit_target_pct")}
+            {field("MAX DAILY LOSS (%)", "max_daily_loss_pct")}
+            {field("MAX TOTAL DRAWDOWN (%)", "max_total_drawdown_pct")}
+            {field("MIN TRADING DAYS", "min_trading_days", { min: 1, step: 1 })}
+            {field("RISK PER TRADE (%)", "risk_per_trade_pct")}
+            {field("MAX OPEN TRADES", "max_open_trades", { min: 1, step: 1 })}
+            {field("MAX CONSECUTIVE LOSSES", "max_consecutive_losses", { min: 1, step: 1 })}
+            <div>
+              <label style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, letterSpacing: "0.12em", display: "block", marginBottom: 7 }}>INSTRUMENTS (comma-separated)</label>
+              <input value={(form.instruments || []).join(", ")} onChange={setInstruments}
+                placeholder="XAUUSD, EURUSD, US30"
+                style={{ ...inputStyle, fontFamily: C.mono, fontSize: 12 }} />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 18 }}>
+            {field("AUTO-EXECUTE (when away)", "auto_execute", { type: "checkbox" })}
+            {field("STOP ON DAILY LOSS", "stop_on_daily_loss", { type: "checkbox" })}
+            {field("NEWS GUARD", "news_guard_enabled", { type: "checkbox" })}
+            {field("CLOSE BEFORE WEEKEND", "hold_over_weekend", { type: "checkbox" })}
+          </div>
+
+          <button onClick={save} disabled={status === "saving"} style={{ ...btnGold, width: "100%", marginTop: 22 }}>
+            {status === "saving" ? "Saving..." : status === "saved" ? "✓ Rule book saved" : status.startsWith("error") ? "Fix values — " + status.split(":")[1] : "Save rule book"}
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "28px" }}>
+            <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 16 }}>DERIVED LIMITS</div>
+            {[
+              ["Balance needed to pass", derived.target, C.green],
+              ["Max drawdown floor (eval failed below)", derived.ddFloor, C.red],
+              ["Daily loss floor (trading halts below)", derived.dailyFloor, C.gold],
+            ].map(([label, val, color]) => (
+              <div key={label} style={{ background: C.surface2, borderRadius: 8, padding: "12px 14px", marginBottom: 10 }}>
+                <div style={{ fontFamily: C.mono, fontSize: 8, color: C.text3, marginBottom: 6 }}>{label.toUpperCase()}</div>
+                <div style={{ fontFamily: C.mono, fontSize: 16, color, fontWeight: 700 }}>${val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "28px" }}>
+            <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 12 }}>HOW IT WORKS</div>
+            <ol style={{ fontFamily: C.sans, fontSize: 12, color: C.text2, lineHeight: 1.9, margin: 0, paddingLeft: 20 }}>
+              <li>Run the local prop-eval agent next to your MT5 terminal.</li>
+              <li>The agent pulls this rule book from the backend.</li>
+              <li>Ollama + TradingAgents analyse the market on your machine.</li>
+              <li>Proposed trades pass through the hard risk gate here.</li>
+              <li>Progress is pushed back to your dashboard for tracking.</li>
+            </ol>
+            {!loaded && <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3, marginTop: 12 }}>Loading saved rule book...</div>}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

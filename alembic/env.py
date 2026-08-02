@@ -15,6 +15,7 @@ from app.models import (
     SupportTicket, TicketNote, Announcement,
 )
 from app.models.password_reset import PasswordResetToken
+from app.models.prop_eval import PropEvalSettings, PropEvalSnapshot
 
 config = context.config
 

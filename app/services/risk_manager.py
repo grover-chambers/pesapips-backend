@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
+from app.core.instruments import get_pip_size, round_price
 
 
 @dataclass
@@ -135,16 +136,19 @@ class RiskManager:
         signal: str,
         sl_pips: int,
         tp_pips: int,
-        pip_size: float = 0.1,
+        pip_size: Optional[float] = None,
+        symbol: str = "XAUUSD",
     ) -> Tuple[float, float]:
+        if pip_size is None:
+            pip_size = get_pip_size(symbol)
         sl_distance = sl_pips * pip_size
         tp_distance = tp_pips * pip_size
         if signal == "BUY":
-            sl = round(entry_price - sl_distance, 2)
-            tp = round(entry_price + tp_distance, 2)
+            sl = round_price(symbol, entry_price - sl_distance)
+            tp = round_price(symbol, entry_price + tp_distance)
         else:
-            sl = round(entry_price + sl_distance, 2)
-            tp = round(entry_price - tp_distance, 2)
+            sl = round_price(symbol, entry_price + sl_distance)
+            tp = round_price(symbol, entry_price - tp_distance)
         return sl, tp
 
     def should_trail_stop(
@@ -154,6 +158,7 @@ class RiskManager:
         current_price: float,
         current_sl: float,
         atr: float,
+        symbol: str = "XAUUSD",
     ) -> Tuple[bool, float, str]:
         """
         Trailing stop logic:
@@ -161,6 +166,7 @@ class RiskManager:
         - At 2R profit → trail by 1 ATR
         Returns (should_modify: bool, new_sl: float, reason: str)
         """
+        pip_size = get_pip_size(symbol)
         if signal == "BUY":
             risk = entry_price - current_sl
             if risk <= 0:
@@ -169,11 +175,11 @@ class RiskManager:
             r_multiple = profit / risk
 
             if r_multiple >= 2.0:
-                new_sl = round(current_price - atr, 2)
+                new_sl = round_price(symbol, current_price - atr)
                 if new_sl > current_sl:
                     return True, new_sl, f"Trailing at 2R+ profit (R={r_multiple:.1f}), trail by 1 ATR"
             elif r_multiple >= 1.0:
-                breakeven = round(entry_price + 0.1, 2)
+                breakeven = round_price(symbol, entry_price + pip_size)
                 if breakeven > current_sl:
                     return True, breakeven, f"Breakeven at 1R profit (R={r_multiple:.1f})"
         else:
@@ -184,11 +190,11 @@ class RiskManager:
             r_multiple = profit / risk
 
             if r_multiple >= 2.0:
-                new_sl = round(current_price + atr, 2)
+                new_sl = round_price(symbol, current_price + atr)
                 if new_sl < current_sl:
                     return True, new_sl, f"Trailing at 2R+ profit (R={r_multiple:.1f}), trail by 1 ATR"
             elif r_multiple >= 1.0:
-                breakeven = round(entry_price - 0.1, 2)
+                breakeven = round_price(symbol, entry_price - pip_size)
                 if breakeven < current_sl:
                     return True, breakeven, f"Breakeven at 1R profit (R={r_multiple:.1f})"
 

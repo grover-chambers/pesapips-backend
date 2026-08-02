@@ -4,12 +4,14 @@ from sqlalchemy import or_
 from typing import Optional, List
 from datetime import datetime, timezone
 import re
+import logging
 
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.blog import BlogPost
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/blog", tags=["blog"])
 
 CATEGORIES = ["Strategy", "Market Analysis", "Education", "Broker Review", "Trade Journal", "General"]
@@ -145,7 +147,8 @@ def submit_post(
             )
             db.add(notif)
         db.commit()
-    except: pass
+    except Exception:
+        logger.exception("Failed to enqueue blog submit notification")
 
     return {"status": "submitted", "post_id": post.id, "slug": post.slug}
 
@@ -252,7 +255,8 @@ def admin_approve(
         )
         db.add(notif)
         db.commit()
-    except: pass
+    except Exception:
+        logger.exception("Failed to enqueue blog approval notification")
 
     return {"status": "published", "slug": post.slug}
 
@@ -283,7 +287,8 @@ def admin_reject(
         )
         db.add(notif)
         db.commit()
-    except: pass
+    except Exception:
+        logger.exception("Failed to enqueue blog reject notification")
 
     return {"status": "rejected"}
 

@@ -20,8 +20,12 @@ def get_current_user(
     payload = decode_access_token(token)
     if not payload:
         raise credentials_exception
-    user_id: int = payload.get("sub")
-    if user_id is None:
+    user_id_sub = payload.get("sub")
+    if user_id_sub is None:
+        raise credentials_exception
+    try:
+        user_id = int(user_id_sub)
+    except (TypeError, ValueError):
         raise credentials_exception
     user = db.query(User).filter(User.id == user_id).first()
     if not user:

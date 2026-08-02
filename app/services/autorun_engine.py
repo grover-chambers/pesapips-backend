@@ -11,6 +11,7 @@ from typing import Dict
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.instruments import get_pip_size, round_price
 from app.models.user import User
 from app.models.strategy import UserStrategy
 from app.services.signal_engine import SignalEngine
@@ -116,6 +117,7 @@ async def _run_loop(user_id: int):
 
             params = active_us.custom_params or {}
             asset = active_us.asset or "XAUUSD"
+            params["symbol"] = asset  # C1 fix: give the signal engine instrument context
             tf = params.get("timeframe", "M5")
 
             market_open, market_reason = is_market_open(asset)
@@ -183,6 +185,7 @@ async def _run_loop(user_id: int):
                             current_price=current_price,
                             current_sl=current_sl,
                             atr=atr,
+                            symbol=asset,
                         )
                         if should_trail and new_sl != current_sl:
                             _log(user_id, f"Trailing stop: {trail_reason} | SL: {current_sl} → {new_sl}")
@@ -311,7 +314,7 @@ async def _run_loop(user_id: int):
 
                 risk_pct = float(params.get("risk_per_trade", 1.0))
                 rm = RiskManager(balance=balance, risk_per_trade=risk_pct)
-                pip_size = 0.1
+                pip_size = get_pip_size(asset)
                 sl_pips = sl_dist / pip_size if sl_dist > 0 else float(params.get("sl_pips", 15))
                 volume = rm.calculate_lot_size(sl_pips=sl_pips)
                 volume = round(max(0.01, min(volume, 1.0)), 2)
@@ -322,13 +325,13 @@ async def _run_loop(user_id: int):
                     _log(user_id, f"Lot adjusted: {ctx.lot_adjustment_reason}")
 
                 if sl_dist > 0 and tp_dist > 0:
-                    sl_price = round(current_price - sl_dist, 2) if signal == "BUY" else round(current_price + sl_dist, 2)
-                    tp_price = round(current_price + tp_dist, 2) if signal == "BUY" else round(current_price - tp_dist, 2)
+                    sl_price = round_price(asset, current_price - sl_dist) if signal == "BUY" else round_price(asset, current_price + sl_dist)
+                    tp_price = round_price(asset, current_price + tp_dist) if signal == "BUY" else round_price(asset, current_price - tp_dist)
                 else:
                     sl_pips_val = float(params.get("sl_pips", 15)) * pip_size
                     tp_pips_val = float(params.get("tp_pips", 30)) * pip_size
-                    sl_price = round(current_price - sl_pips_val, 2) if signal == "BUY" else round(current_price + sl_pips_val, 2)
-                    tp_price = round(current_price + tp_pips_val, 2) if signal == "BUY" else round(current_price - tp_pips_val, 2)
+                    sl_price = round_price(asset, current_price - sl_pips_val) if signal == "BUY" else round_price(asset, current_price + sl_pips_val)
+                    tp_price = round_price(asset, current_price + tp_pips_val) if signal == "BUY" else round_price(asset, current_price - tp_pips_val)
 
                 strategy_name = params.get("strategy_name", "AutoRun")
                 comment = f"PP-Auto:{strategy_name[:12]}"
@@ -429,6 +432,7 @@ async def _run_loop(user_id: int):
     _log(user_id, "Autorun stopped")
     if user_id in _sessions:
         _sessions[user_id]["running"] = False
+        _sessions[user_id]["task"] = None
 
 
 async def start(user_id: int):
@@ -454,25 +458,10 @@ async def stop(user_id: int):
         return {"status": "not_running"}
     _sessions[user_id]["running"] = False
     task = _sessions[user_id].get("task")
+    _sessions[user_id]["task"] = None
     if task and not task.done():
         task.cancel()
     return {"status": "stopped"}
-
-
-def save_autorun_state(user_id: int, active: bool, strategy_id: int = None):
-    try:
-        from app.core.database import SessionLocal
-        from app.models.user import User
-        db = SessionLocal()
-        u = db.query(User).filter(User.id == user_id).first()
-        if u:
-            u.autorun_active = active
-            if strategy_id:
-                u.autorun_strategy_id = strategy_id
-            db.commit()
-        db.close()
-    except Exception as e:
-        logger.error(f"Failed to save autorun state: {e}")
 
 
 async def restore_autorun_sessions():
@@ -491,7 +480,7 @@ async def restore_autorun_sessions():
         for user in active_users:
             _log(user.id, "Autorun restored after server restart")
             await start(user.id)
-        logger.info(f"Restored autorun for user {user.id}")
+            logger.info(f"Restored autorun for user {user.id}")
     except Exception as e:
         logger.error(f"Failed to restore autorun sessions: {e}")
 

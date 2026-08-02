@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, and_
 from typing import Optional
 from datetime import datetime, timezone, timedelta
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.dependencies import get_current_user
@@ -16,30 +17,58 @@ from app.models.trading_audit import SignalAudit
 router = APIRouter(prefix="/audit", tags=["Audit"])
 
 
+class RecordSignalPayload(BaseModel):
+    symbol: str = "XAUUSD"
+    timeframe: str = "M5"
+    signal: str = "HOLD"
+    confidence: float = 0.0
+    reason: str = Field(default="", max_length=500)
+    price_at_signal: Optional[float] = None
+    sl_price: Optional[float] = None
+    tp_price: Optional[float] = None
+    regime: Optional[str] = None
+    regime_confidence: Optional[float] = None
+    strategy_id: Optional[int] = None
+    strategy_name: Optional[str] = None
+    strategy_fit: Optional[str] = None
+    lot_size: Optional[float] = None
+    data_source: str = "live"
+    is_auto: bool = False
+
+
+class RecordOutcomePayload(BaseModel):
+    exit_price: Optional[float] = None
+    closed: bool = False
+    pnl: Optional[float] = None
+    result: Optional[str] = None
+    pnl_points: Optional[float] = None
+    mt5_ticket: Optional[int] = None
+
+
 @router.post("/record")
 def record_signal(
-    payload: dict,
+    payload: RecordSignalPayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     audit = SignalAudit(
         user_id=current_user.id,
-        symbol=payload.get("symbol", "XAUUSD"),
-        timeframe=payload.get("timeframe", "M5"),
-        signal=payload.get("signal", "HOLD"),
-        confidence=payload.get("confidence", 0.0),
-        reason=payload.get("reason", "")[:500],
-        price_at_signal=payload.get("price_at_signal"),
-        sl_price=payload.get("sl_price"),
-        tp_price=payload.get("tp_price"),
-        regime=payload.get("regime"),
-        regime_confidence=payload.get("regime_confidence"),
-        strategy_id=payload.get("strategy_id"),
-        strategy_name=payload.get("strategy_name"),
-        strategy_fit=payload.get("strategy_fit"),
-        lot_size=payload.get("lot_size"),
-        data_source=payload.get("data_source", "live"),
-        is_auto=payload.get("is_auto", False),
+        symbol=payload.symbol,
+        timeframe=payload.timeframe,
+        signal=payload.signal,
+        confidence=payload.confidence,
+        reason=payload.reason[:500],
+        price_at_signal=payload.price_at_signal,
+        sl_price=payload.sl_price,
+        tp_price=payload.tp_price,
+        regime=payload.regime,
+        regime_confidence=payload.regime_confidence,
+        strategy_id=payload.strategy_id,
+        strategy_name=payload.strategy_name,
+        strategy_fit=payload.strategy_fit,
+        lot_size=payload.lot_size,
+        data_source=payload.data_source,
+        is_auto=payload.is_auto,
     )
     db.add(audit)
     db.commit()
@@ -50,7 +79,7 @@ def record_signal(
 @router.patch("/{audit_id}/outcome")
 def record_outcome(
     audit_id: int,
-    payload: dict,
+    payload: RecordOutcomePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -61,13 +90,13 @@ def record_outcome(
     if not audit:
         raise HTTPException(status_code=404, detail="Audit record not found")
 
-    audit.exit_price = payload.get("exit_price")
-    audit.exit_time = datetime.now(timezone.utc) if payload.get("closed") else None
-    audit.pnl = payload.get("pnl")
-    audit.result = payload.get("result")
-    audit.pnl_points = payload.get("pnl_points")
-    if payload.get("mt5_ticket"):
-        audit.mt5_ticket = payload["mt5_ticket"]
+    audit.exit_price = payload.exit_price
+    audit.exit_time = datetime.now(timezone.utc) if payload.closed else None
+    audit.pnl = payload.pnl
+    audit.result = payload.result
+    audit.pnl_points = payload.pnl_points
+    if payload.mt5_ticket:
+        audit.mt5_ticket = payload.mt5_ticket
     db.commit()
     return {"status": "updated"}
 

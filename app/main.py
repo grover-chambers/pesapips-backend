@@ -4,6 +4,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.models import User, MT5Account, Strategy, UserStrategy, Trade, PerformanceLog
@@ -12,38 +13,46 @@ from app.models import CourseModule, CourseLesson, CourseQuiz, UserProgress
 from app.models import SupportTicket, TicketNote, Announcement
 from app.models.password_reset import PasswordResetToken
 from app.models.trading_audit import SignalAudit, ReferralCode, ReferralUse, PaperTrade
-from app.routers import auth, mt5, strategies, trading, dashboard, signal, notifications, payments, ws_bridge, market, courses, admin, blog
-from app.routers import audit, referrals, paper_trading, mpesa, telegram, briefing
+from app.models.prop_eval import PropEvalSettings, PropEvalSnapshot
+from app.routers import (
+    auth, mt5, strategies, trading, dashboard, signal,
+    notifications, payments, ws_bridge, market, courses, admin, blog,
+    audit, referrals, paper_trading, mpesa, telegram, briefing, prop_eval,
+)
 
 logger = logging.getLogger("pesapips")
+APP_VERSION = "0.4.0"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # NOTE: table creation is governed by Alembic migrations only.
+    # Do NOT call Base.metadata.create_all here — it bypasses Alembic and
+    # causes schema drift. See alembic/versions/* for migrations.
     try:
         from app.services.autorun_engine import restore_autorun_sessions
         await restore_autorun_sessions()
         logger.info("Autorun sessions restored")
-    except Exception as e:
-        logger.error(f"Autorun restore failed: {e}")
+    except Exception:
+        logger.exception("Autorun restore failed")
     try:
         from app.services.regime_scanner import start_regime_scanner
         asyncio.create_task(start_regime_scanner())
         logger.info("Regime scanner started")
-    except Exception as e:
-        logger.error(f"Regime scanner failed to start: {e}")
+    except Exception:
+        logger.exception("Regime scanner failed to start")
     try:
         from app.services.news_filter import force_refresh
         force_refresh()
         logger.info("News calendar cache primed")
-    except Exception as e:
-        logger.error(f"News calendar prime failed: {e}")
+    except Exception:
+        logger.exception("News calendar prime failed")
     yield
 
 
-app = FastAPI(title=settings.APP_NAME, version="0.3.0", lifespan=lifespan)
+app = FastAPI(title=settings.APP_NAME, version=APP_VERSION, lifespan=lifespan)
 
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -71,13 +80,14 @@ app.include_router(paper_trading.router)
 app.include_router(mpesa.router)
 app.include_router(telegram.router)
 app.include_router(briefing.router)
+app.include_router(prop_eval.router)
 
 
 @app.get("/")
 def root():
-    return {"app": settings.APP_NAME, "version": "0.3.0", "status": "running", "docs": "/docs"}
+    return {"app": settings.APP_NAME, "version": APP_VERSION, "status": "running", "docs": "/docs"}
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}

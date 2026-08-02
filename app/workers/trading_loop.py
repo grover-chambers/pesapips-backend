@@ -36,6 +36,7 @@ def run_trading_loop():
                 params = us.custom_params
                 asset = us.asset
                 timeframe = us.timeframe
+                params = {**params, "symbol": asset}  # C1 fix: instrument context for the engine
 
                 # Fetch market data
                 df = get_market_data(symbol=asset, timeframe=timeframe, periods=200)
@@ -72,6 +73,7 @@ def run_trading_loop():
                         signal=signal,
                         sl_pips=params.get("sl_pips", 15),
                         tp_pips=params.get("tp_pips", 30),
+                        symbol=asset,
                     )
 
                     trade = Trade(

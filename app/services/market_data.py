@@ -1,10 +1,12 @@
 import os
+import logging
 import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 TWELVE_KEY = os.getenv("TWELVE_DATA_KEY", "")
 
 # Twelve Data symbol map
@@ -93,7 +95,7 @@ def _twelve_candles(symbol: str, timeframe: str, periods: int) -> Optional[pd.Da
         r = requests.get(url, params=params, timeout=10)
         data = r.json()
         if data.get("status") == "error" or "values" not in data:
-            print(f"[twelve] {symbol} error: {data.get('message','unknown')}")
+            logger.warning("Twelve Data error for %s: %s", symbol, data.get("message", "unknown"))
             return None
         rows = data["values"]
         if not rows:
@@ -109,8 +111,8 @@ def _twelve_candles(symbol: str, timeframe: str, periods: int) -> Optional[pd.Da
         df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
         df = df[["open","high","low","close","volume"]].dropna(subset=["open","close"])
         return df.tail(periods)
-    except Exception as e:
-        print(f"[twelve] candles failed for {symbol}: {e}")
+    except Exception:
+        logger.exception("Twelve Data candles failed for %s", symbol)
         return None
 
 
@@ -127,8 +129,8 @@ def _twelve_price(symbol: str) -> Optional[float]:
         data = r.json()
         price = data.get("price")
         return float(price) if price else None
-    except Exception as e:
-        print(f"[twelve] price failed for {symbol}: {e}")
+    except Exception:
+        logger.exception("Twelve Data price failed for %s", symbol)
         return None
 
 
@@ -154,16 +156,9 @@ def _twelve_batch_prices(symbols: list) -> dict:
             if price:
                 result[our_sym] = float(price)
         return result
-    except Exception as e:
-        print(f"[twelve] batch prices failed: {e}")
+    except Exception:
+        logger.exception("Twelve Data batch prices failed")
         return {}
-
-
-# ── Yahoo fallback ────────────────────────────────────────────────────────────
-
-def _yahoo_candles(symbol: str, timeframe: str, periods: int) -> Optional[pd.DataFrame]:
-    """Yahoo Finance fallback — currently disabled. Use Twelve Data instead."""
-    return None
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -180,11 +175,11 @@ def get_market_data(
         df._data_source = "twelve_data"
         return df
     if allow_synthetic:
-        print(f"[market_data] WARNING: Twelve Data failed for {symbol}, using synthetic — signals should be blocked")
+        logger.warning("Twelve Data failed for %s, using synthetic — signals should be blocked", symbol)
         synth = _synthetic(periods=periods)
         synth._data_source = "synthetic"
         return synth
-    print(f"[market_data] Twelve Data failed for {symbol}, synthetic disabled — returning None")
+    logger.warning("Twelve Data failed for %s, synthetic disabled — returning None", symbol)
     return None
 
 
@@ -249,8 +244,8 @@ def get_market_watch() -> list:
                 "sparkline":  [round(float(p), asset["decimals"]) for p in sparkline],
                 "decimals":   asset["decimals"],
             })
-        except Exception as e:
-            print(f"[market_watch] {sym} failed: {e}")
+        except Exception:
+            logger.exception("market_watch %s failed", sym)
             results.append({
                 "symbol": sym, "name": asset["name"],
                 "price": 0.0, "change_pct": 0.0, "change_abs": 0.0,

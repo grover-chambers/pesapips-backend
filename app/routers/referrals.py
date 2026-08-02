@@ -88,7 +88,19 @@ def my_referrals(
 def process_upgrade_reward(
     referred_user_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    """Process referral reward when a referred user upgrades.
+
+    Security: requires auth. The caller must be an admin OR the M-Pesa
+    webhook handler (internally called from app/services/mpesa.py).
+    Regular users cannot call this endpoint directly to bank rewards.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to process referral rewards",
+        )
     referral_use = db.query(ReferralUse).filter(
         ReferralUse.referred_id == referred_user_id,
         ReferralUse.reward_months == 0,

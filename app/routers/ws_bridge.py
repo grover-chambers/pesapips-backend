@@ -1,8 +1,15 @@
 """
 WebSocket bridge between user agents and PesaPips backend.
 Each user's agent connects here and waits for trade commands.
+
+Security notes:
+- WebSocket authentication uses the Sec-WebSocket-Protocol subprotocol header
+  (NOT the URL path) so JWT tokens do not leak to server access logs, browser
+  history, or proxies.
+- The REST status endpoint requires the requesting user to be authenticated
+  and only permits querying one's own status.
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 from typing import Dict, Optional
 import json
@@ -54,6 +61,7 @@ class AgentManager:
         except asyncio.TimeoutError:
             return {"status": "error", "message": "MT5 agent timed out. Make sure MT5 is running."}
         except Exception as e:
+            logger.exception("Error sending command to agent")
             return {"status": "error", "message": str(e)}
         finally:
             pending_responses.pop(request_id, None)
@@ -62,13 +70,31 @@ class AgentManager:
 manager = AgentManager()
 
 
-@router.websocket("/agent/{user_id}/{token}")
-async def agent_endpoint(websocket: WebSocket, user_id: int, token: str, db: Session = Depends(get_db)):
-    # Verify token
+@router.websocket("/agent/{user_id}")
+async def agent_endpoint(
+    websocket: WebSocket,
+    user_id: int,
+    sec_websocket_protocol: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """WebSocket endpoint for MT5 agent connections.
+
+    Authentication: JWT sent via the Sec-WebSocket-Protocol header (subprotocol
+    field). The client must open the WebSocket with:
+        new WebSocket(url, [token])   # browser passes token as subprotocol
+    This keeps the JWT out of URL query strings (which are logged by reverse
+    proxies and persisted in browser history).
+    """
     from app.dependencies import verify_token
+
+    token = sec_websocket_protocol
+    if not token:
+        await websocket.close(code=4001, reason="Missing auth subprotocol")
+        return
+
     user = verify_token(token, db)
     if not user or user.id != user_id:
-        await websocket.close(code=4001)
+        await websocket.close(code=4001, reason="Invalid token")
         return
 
     await websocket.accept()
@@ -104,12 +130,38 @@ async def agent_endpoint(websocket: WebSocket, user_id: int, token: str, db: Ses
             if account:
                 account.is_connected = False
                 db.commit()
-        except:
-            pass
+        except Exception:
+            logger.exception("Failed to mark MT5 account disconnected")
 
 
-# REST endpoint to check agent status
+def _get_current_user_or_403(
+    token: str = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authenticates via Authorization header (Bearer token) for REST endpoints."""
+    from app.dependencies import verify_token
+    raw = None
+    if authorization and authorization.lower().startswith("bearer "):
+        raw = authorization[7:].strip()
+    elif token:
+        raw = token
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+    user = verify_token(raw, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return user
+
+
+# REST endpoint to check agent status — auth required, can only query own status
 @router.get("/agent/status/{user_id}")
-def agent_status(user_id: int, db: Session = Depends(get_db)):
+def agent_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_get_current_user_or_403),
+):
+    if user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view another user's status")
     connected = manager.is_connected(user_id)
     return {"connected": connected, "user_id": user_id}
