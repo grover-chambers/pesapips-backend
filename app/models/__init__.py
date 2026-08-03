@@ -13,3 +13,5 @@ from app.models.admin import SupportTicket, TicketNote, Announcement
 from app.models.blog import BlogPost
 
 from app.models.prop_eval import PropEvalSettings, PropEvalSnapshot
+
+from app.models.contest import Contest, ContestEntry

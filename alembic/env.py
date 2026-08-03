@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.models.password_reset import PasswordResetToken
 from app.models.prop_eval import PropEvalSettings, PropEvalSnapshot
+from app.models.contest import Contest, ContestEntry
 
 config = context.config
 

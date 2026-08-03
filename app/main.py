@@ -14,10 +14,12 @@ from app.models import SupportTicket, TicketNote, Announcement
 from app.models.password_reset import PasswordResetToken
 from app.models.trading_audit import SignalAudit, ReferralCode, ReferralUse, PaperTrade
 from app.models.prop_eval import PropEvalSettings, PropEvalSnapshot
+from app.models.contest import Contest, ContestEntry
 from app.routers import (
     auth, mt5, strategies, trading, dashboard, signal,
     notifications, payments, ws_bridge, market, courses, admin, blog,
     audit, referrals, paper_trading, mpesa, telegram, briefing, prop_eval,
+    contests,
 )
 
 logger = logging.getLogger("pesapips")
@@ -81,6 +83,7 @@ app.include_router(mpesa.router)
 app.include_router(telegram.router)
 app.include_router(briefing.router)
 app.include_router(prop_eval.router)
+app.include_router(contests.router)
 
 
 @app.get("/")

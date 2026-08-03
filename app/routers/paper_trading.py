@@ -31,36 +31,51 @@ def open_paper_trade(
     timeframe = payload.get("timeframe", "M5")
     params = payload.get("params", {})
     strategy_name = payload.get("strategy_name", "Paper")
+    sim_mode = bool(payload.get("sim_mode", False))  # demo contests: allow synthetic prices offline
+    manual = bool(payload.get("manual", False))      # demo contests: discretionary entry (skip signal engine)
+    trade_type = payload.get("trade_type", "BUY").upper()
+    lot = float(payload.get("lot") or 0.01)
 
     df = get_market_data(symbol=symbol, timeframe=timeframe, periods=500, allow_synthetic=True)
     if df is None or df.empty:
         raise HTTPException(status_code=503, detail="No market data available")
 
-    if is_synthetic_data(df):
+    if is_synthetic_data(df) and not sim_mode:
         raise HTTPException(status_code=503, detail="Cannot paper-trade on synthetic data — no real market data available")
 
-    result = run_signal(df, params)
-    signal = result.get("signal", "HOLD")
-
-    if signal not in ("BUY", "SELL"):
-        return {"signal": signal, "reason": result.get("reason", ""), "trade_opened": False}
-
-    price = float(df["close"].iloc[-1])
-    sl_dist = result.get("sl", 0)
-    tp_dist = result.get("tp", 0)
-
-    if signal == "BUY":
-        sl = round(price - sl_dist, 2) if sl_dist > 0 else round(price * 0.99, 2)
-        tp = round(price + tp_dist, 2) if tp_dist > 0 else round(price * 1.02, 2)
+    if manual:
+        # Discretionary paper trade for demo contests — open at the current price.
+        if trade_type not in ("BUY", "SELL"):
+            raise HTTPException(status_code=422, detail="trade_type must be BUY or SELL")
+        price = float(df["close"].iloc[-1])
+        sl = payload.get("sl")
+        tp = payload.get("tp")
+        signal, sl_dist, tp_dist, confidence, reason = trade_type, 0.0, 0.0, 1.0, "manual"
+        if sl is None:
+            sl = round(price * 0.99, 2) if signal == "BUY" else round(price * 1.01, 2)
+        if tp is None:
+            tp = round(price * 1.02, 2) if signal == "BUY" else round(price * 0.98, 2)
+        result = {"sl": 0, "tp": 0, "confidence": 1.0, "reason": "manual"}
     else:
-        sl = round(price + sl_dist, 2) if sl_dist > 0 else round(price * 1.01, 2)
-        tp = round(price - tp_dist, 2) if tp_dist > 0 else round(price * 0.98, 2)
+        result = run_signal(df, params)
+        signal = result.get("signal", "HOLD")
+        if signal not in ("BUY", "SELL"):
+            return {"signal": signal, "reason": result.get("reason", ""), "trade_opened": False}
+        price = float(df["close"].iloc[-1])
+        sl_dist = result.get("sl", 0)
+        tp_dist = result.get("tp", 0)
+        if signal == "BUY":
+            sl = round(price - sl_dist, 2) if sl_dist > 0 else round(price * 0.99, 2)
+            tp = round(price + tp_dist, 2) if tp_dist > 0 else round(price * 1.02, 2)
+        else:
+            sl = round(price + sl_dist, 2) if sl_dist > 0 else round(price * 1.01, 2)
+            tp = round(price - tp_dist, 2) if tp_dist > 0 else round(price * 0.98, 2)
 
     trade = PaperTrade(
         user_id=current_user.id,
         symbol=symbol,
         trade_type=signal,
-        lot=0.01,
+        lot=lot,
         entry_price=price,
         sl=sl,
         tp=tp,
@@ -99,7 +114,7 @@ def open_paper_trade(
         "entry_price": price,
         "sl": sl,
         "tp": tp,
-        "lot": 0.01,
+        "lot": lot,
         "confidence": result.get("confidence", 0),
         "reason": result.get("reason", ""),
     }

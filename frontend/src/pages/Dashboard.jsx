@@ -5488,6 +5488,7 @@ function Settings({ user }) {
     { id: "notifs",   label: "Notifications"  },
     { id: "plan",     label: "Plan & Billing" },
     { id: "prop",     label: "Prop Eval"      },
+    { id: "contests", label: "Demo Contests"  },
     { id: "system",   label: "System Stats"   },
     { id: "danger",   label: "Danger Zone"    },
   ]
@@ -5782,6 +5783,10 @@ function Settings({ user }) {
         <PropEvalPanel user={user} />
       )}
 
+      {tab === "contests" && (
+        <ContestsPanel user={user} />
+      )}
+
       {tab === "danger" && (
         <div style={{ maxWidth: 560 }}>
           <div style={{ background: C.surface, border: `1px solid ${C.red}30`, borderRadius: 14, padding: "28px" }}>
@@ -6029,6 +6034,199 @@ function PropEvalPanel({ user }) {
             {!loaded && <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3, marginTop: 12 }}>Loading saved rule book...</div>}
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── DEMO CONTESTS ───────────────────────────────────────────────────
+// Private-tool feature: run offline trading competitions on paper trades.
+// Entries open/close at synthetic prices (no broker, no internet needed).
+function ContestsPanel({ user }) {
+  const [contests,    setContests]    = useState([])
+  const [selected,    setSelected]    = useState(null)
+  const [leaderboard, setLeaderboard] = useState([])
+  const [positions,   setPositions]   = useState([])
+  const [msg,         setMsg]         = useState("")
+  const [createForm,  setCreateForm]  = useState({
+    name: "", start_balance: 10000, days: 30, start_at: new Date().toISOString().slice(0, 16),
+  })
+  const [tradeForm,   setTradeForm]   = useState({ symbol: "XAUUSD", trade_type: "BUY", lot: 0.1 })
+
+  const loadContests = async () => {
+    try {
+      const { data } = await api.get("/contests")
+      setContests(data)
+    } catch (e) { setMsg("Failed to load contests: " + (e?.response?.data?.detail || e.message)) }
+  }
+  const loadLeaderboard = async (id) => {
+    try {
+      const { data } = await api.get(`/contests/${id}/leaderboard`)
+      setLeaderboard(data)
+    } catch (e) { setMsg("Failed to load leaderboard") }
+  }
+  const loadPositions = async () => {
+    try {
+      const { data } = await api.get("/paper-trading/positions")
+      setPositions(data.positions || [])
+    } catch (e) { setPositions([]) }
+  }
+
+  useEffect(() => { loadContests(); loadPositions() }, [])
+
+  const fmt = (iso) => iso ? new Date(iso).toLocaleDateString("en-KE", { day: "numeric", month: "short" }) : "—"
+
+  const openTrade = async () => {
+    setMsg("")
+    try {
+      const res = await api.post("/paper-trading/open", {
+        symbol: tradeForm.symbol, trade_type: tradeForm.trade_type,
+        lot: parseFloat(tradeForm.lot) || 0.1, sim_mode: true, manual: true,
+      })
+      setMsg(res.data.trade_opened
+        ? `Opened ${res.data.signal} ${res.data.symbol} @ ${res.data.entry_price}`
+        : "No trade opened")
+      loadPositions()
+    } catch (e) { setMsg("Open failed: " + (e?.response?.data?.detail || e.message)) }
+  }
+
+  const closeTrade = async (id) => {
+    try { await api.post(`/paper-trading/close/${id}`); loadPositions() }
+    catch (e) { setMsg("Close failed: " + (e?.response?.data?.detail || e.message)) }
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20, alignItems: "start" }}>
+      {/* LEFT: contests + leaderboard */}
+      <div>
+        {user?.is_admin && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px", marginBottom: 20 }}>
+            <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 16 }}>CREATE CONTEST</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <input value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
+                placeholder="Contest name" style={{ ...inputStyle }} />
+              <input value={createForm.start_balance} onChange={e => setCreateForm({ ...createForm, start_balance: e.target.value })}
+                placeholder="Start balance" style={{ ...inputStyle }} />
+              <input value={createForm.days} onChange={e => setCreateForm({ ...createForm, days: e.target.value })}
+                placeholder="Days" style={{ ...inputStyle }} />
+            </div>
+            <button onClick={async () => {
+              const days = parseInt(createForm.days) || 30
+              const start = new Date(createForm.start_at)
+              try {
+                await api.post("/contests", {
+                  name: createForm.name, start_balance: parseFloat(createForm.start_balance) || 10000,
+                  start_at: start.toISOString(), end_at: new Date(start.getTime() + days * 86400000).toISOString(),
+                })
+                setCreateForm({ name: "", start_balance: 10000, days: 30, start_at: new Date().toISOString().slice(0, 16) })
+                loadContests()
+              } catch (e) { setMsg("Create failed: " + (e?.response?.data?.detail || e.message)) }
+            }} style={{ ...btnGold, padding: "10px 18px", fontSize: 12 }}>
+              Create contest
+            </button>
+          </div>
+        )}
+
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px" }}>
+          <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 16 }}>ACTIVE CONTESTS</div>
+          {contests.length === 0 && <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>No contests yet.</div>}
+          {contests.map(c => (
+            <div key={c.id} style={{ padding: "14px 16px", border: `1px solid ${C.border2}`, borderRadius: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontFamily: C.sans, fontSize: 14, fontWeight: 600, color: C.text }}>{c.name}</span>
+                  {c.joined && <span style={{ fontFamily: C.mono, fontSize: 9, color: C.gold, marginLeft: 8 }}>JOINED</span>}
+                  <div style={{ fontFamily: C.mono, fontSize: 10, color: C.text3, marginTop: 4 }}>
+                    {fmt(c.start_at)} → {fmt(c.end_at)} · ${c.start_balance.toLocaleString()} start · {c.entrants} entrant(s)
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => {
+                    setSelected(c.id); loadLeaderboard(c.id)
+                  }} style={{ ...btnGold, padding: "8px 14px", fontSize: 11 }}>Board</button>
+                  {!c.joined && (
+                    <button onClick={async () => {
+                      try { await api.post(`/contests/${c.id}/join`); loadContests() }
+                      catch (e) { setMsg(e?.response?.data?.detail || "Join failed") }
+                    }} style={{ ...btnGold, padding: "8px 14px", fontSize: 11 }}>Join</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {selected !== null && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px", marginTop: 20 }}>
+            <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 16 }}>LEADERBOARD</div>
+            {leaderboard.length === 0 && <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>No entrants yet.</div>}
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, textAlign: "left" }}>
+                  <th style={{ padding: "6px 8px" }}>#</th><th style={{ padding: "6px 8px" }}>Trader</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Trades</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>PnL</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Return</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map(r => (
+                  <tr key={r.user_id} style={{ fontFamily: C.mono, fontSize: 12, borderTop: `1px solid ${C.border2}` }}>
+                    <td style={{ padding: "8px", color: r.rank === 1 ? C.gold : C.text3, fontWeight: r.rank === 1 ? 700 : 400 }}>{r.rank}</td>
+                    <td style={{ padding: "8px", color: C.text }}>{r.display_name}</td>
+                    <td style={{ padding: "8px", textAlign: "right", color: C.text2 }}>{r.closed_trades}</td>
+                    <td style={{ padding: "8px", textAlign: "right", color: r.closed_pnl >= 0 ? "#4ade80" : C.red }}>{r.closed_pnl >= 0 ? "+" : ""}{r.closed_pnl.toLocaleString()}</td>
+                    <td style={{ padding: "8px", textAlign: "right", color: r.return_pct >= 0 ? "#4ade80" : C.red, fontWeight: 600 }}>{r.return_pct >= 0 ? "+" : ""}{r.return_pct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT: paper trade console */}
+      <div>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px" }}>
+          <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 6 }}>DEMO TRADE CONSOLE</div>
+          <div style={{ fontFamily: C.mono, fontSize: 9, color: C.text3, marginBottom: 16 }}>Offline synthetic prices — for contests only</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <select value={tradeForm.symbol} onChange={e => setTradeForm({ ...tradeForm, symbol: e.target.value })}
+              style={{ ...inputStyle, fontFamily: C.mono, fontSize: 12 }}>
+              {["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "US30", "NAS100", "SPX500"].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={tradeForm.trade_type} onChange={e => setTradeForm({ ...tradeForm, trade_type: e.target.value })}
+              style={{ ...inputStyle, fontFamily: C.mono, fontSize: 12 }}>
+              <option value="BUY">BUY</option><option value="SELL">SELL</option>
+            </select>
+          </div>
+          <input value={tradeForm.lot} onChange={e => setTradeForm({ ...tradeForm, lot: e.target.value })}
+            placeholder="Lot size" style={{ ...inputStyle, marginBottom: 12 }} />
+          <button onClick={openTrade} style={{ ...btnGold, padding: "10px 18px", fontSize: 12, width: "100%" }}>
+            Open demo trade
+          </button>
+        </div>
+
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px", marginTop: 20 }}>
+          <div style={{ fontFamily: C.mono, fontSize: 10, color: C.gold, letterSpacing: "0.14em", marginBottom: 16 }}>OPEN POSITIONS</div>
+          {positions.length === 0 && <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>No open positions.</div>}
+          {positions.map(p => (
+            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", border: `1px solid ${C.border2}`, borderRadius: 10, marginBottom: 8 }}>
+              <div>
+                <span style={{ fontFamily: C.mono, fontSize: 12, color: p.trade_type === "BUY" ? "#4ade80" : C.red, fontWeight: 700 }}>{p.trade_type}</span>{" "}
+                <span style={{ fontFamily: C.sans, fontSize: 13, color: C.text }}>{p.symbol}</span>
+                <div style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>{p.lot} lot @ {p.entry_price}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontFamily: C.mono, fontSize: 12, color: p.profit >= 0 ? "#4ade80" : C.red }}>{p.profit >= 0 ? "+" : ""}{p.profit}</span>
+                <button onClick={() => closeTrade(p.id)} style={{ ...btnGold, padding: "6px 12px", fontSize: 10 }}>Close</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {msg && <div style={{ fontFamily: C.mono, fontSize: 11, color: C.gold, marginTop: 14 }}>{msg}</div>}
       </div>
     </div>
   )
