@@ -39,7 +39,7 @@ def run_trading_loop():
                 params = {**params, "symbol": asset}  # C1 fix: instrument context for the engine
 
                 # Fetch market data
-                df = get_market_data(symbol=asset, timeframe=timeframe, periods=200)
+                df = get_market_data(symbol=asset, timeframe=timeframe, periods=260)
                 if df is None or df.empty:
                     logger.warning(f"No data for {asset}")
                     continue

@@ -1,11 +1,13 @@
 """
 Local bootstrap for PesaPips private-tool mode.
 
-Seeds a local admin + demo user and a default prop-eval rule book, so the
-local stack (backend on :8000, frontend on :5173) is usable immediately.
+Seeds a local admin + demo user, a default prop-eval rule book, and the
+public strategies from strategies/*.json, so the local stack (backend on
+:8000, frontend on :5173) is usable immediately.
 
 Usage:  python scripts/seed_local.py
 """
+import json
 import sys
 from pathlib import Path
 
@@ -17,6 +19,10 @@ from app.core.database import SessionLocal  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models import User  # noqa: E402
 from app.models.prop_eval import PropEvalSettings  # noqa: E402
+from app.models.strategy import Strategy  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+STRATEGIES_DIR = ROOT / "strategies"
 
 ADMIN_EMAIL = "brayanodira@gmail.com"
 ADMIN_PASSWORD = "!Nc0rr3k7"
@@ -66,6 +72,37 @@ def _seed_rulebook(db: Session, user_id: int):
     print("  seeded default prop-eval rule book (FundedNext presets)")
 
 
+def _seed_strategies(db: Session):
+    seeded = 0
+    for path in sorted(STRATEGIES_DIR.glob("*.json")):
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"  skipped {path.name}: {e}")
+            continue
+        name = (data.get("name") or path.stem).strip()
+        if not name:
+            print(f"  skipped {path.name}: no name")
+            continue
+        existing = db.query(Strategy).filter(Strategy.name == name).first()
+        if existing:
+            existing.description = data.get("description")
+            existing.default_params = data.get("default_params", {})
+            existing.is_public = data.get("is_public", True)
+            print(f"  updated strategy: {name}")
+            continue
+        db.add(Strategy(
+            name=name,
+            description=data.get("description"),
+            default_params=data.get("default_params", {}),
+            is_public=data.get("is_public", True),
+        ))
+        print(f"  seeded strategy: {name}")
+        seeded += 1
+    if not seeded:
+        print("  no new strategies to seed")
+
+
 def main():
     db = SessionLocal()
     try:
@@ -74,6 +111,7 @@ def main():
         demo = _get_or_create_user(db, DEMO_EMAIL, DEMO_PASSWORD, False,
                                    "Demo Trader", "DEMO2026")
         _seed_rulebook(db, admin.id)
+        _seed_strategies(db)
         db.commit()
         print("\nLocal bootstrap complete.")
         print(f"  admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")

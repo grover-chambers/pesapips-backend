@@ -91,7 +91,7 @@ def market_scan(current_user: User = Depends(get_current_user)):
     ]
     results = []
     for symbol in assets:
-        df  = get_market_data(symbol=symbol, timeframe="M5", periods=200)
+        df  = get_market_data(symbol=symbol, timeframe="M5", periods=260)
         sig = run_signal(df, params)
         latest = float(df.iloc[-1]["close"]) if df is not None and not df.empty else 0
         prev   = float(df.iloc[-2]["close"]) if df is not None and len(df) > 1 else latest

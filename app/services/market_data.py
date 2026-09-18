@@ -6,8 +6,10 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
 
+from app.core.config import settings as app_settings  # reads .env via pydantic-settings
+
 logger = logging.getLogger(__name__)
-TWELVE_KEY = os.getenv("TWELVE_DATA_KEY", "")
+TWELVE_KEY = os.getenv("TWELVE_DATA_KEY", "") or (app_settings.TWELVE_DATA_KEY or "")
 
 # Twelve Data symbol map
 TWELVE_MAP = {
