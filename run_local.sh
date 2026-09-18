@@ -39,9 +39,9 @@ preflight() {
 # ── Migrate + seed ───────────────────────────────────────────────────
 db_migrate() {
   log "applying migrations..."
-  python3 -m alembic upgrade head
+  ( cd backend && python3 -m alembic upgrade head )
   log "seeding local users (admin + demo)..."
-  python3 scripts/seed_local.py
+  ( cd backend && python3 scripts/seed_local.py )
 }
 
 # ── Backend ──────────────────────────────────────────────────────────
@@ -51,8 +51,8 @@ start_backend() {
     return
   fi
   log "starting backend on :$BACKEND_PORT"
-  setsid nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" \
-    > "$LOG_DIR/backend.log" 2>&1 < /dev/null &
+  ( cd backend && setsid nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" \
+    > "$LOG_DIR/backend.log" 2>&1 < /dev/null & )
   for _ in $(seq 1 30); do
     curl -s -m 1 http://localhost:$BACKEND_PORT/ >/dev/null 2>&1 && { log "backend ready"; return; }
     sleep 1
@@ -79,7 +79,7 @@ start_frontend() {
 start_agent() {
   shift 2>/dev/null || true
   log "starting prop-eval agent (paper/advisor mode) — Ctrl+C to stop"
-  exec python3 agent/prop_eval_agent.py "$@"
+  exec python3 backend/agent/prop_eval_agent.py "$@"
 }
 
 case "${1:-}" in

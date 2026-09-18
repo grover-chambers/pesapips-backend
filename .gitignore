@@ -14,7 +14,7 @@ dist/
 .zed/
 .opencode/
 local_backup.dump
-TradingAgents/assets/
-TradingAgents/uv.lock
+**/TradingAgents/assets/
+**/TradingAgents/uv.lock
 results/
 *.uv

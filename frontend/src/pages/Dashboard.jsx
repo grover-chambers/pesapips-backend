@@ -1794,6 +1794,11 @@ function SignalOverlay({ activeStrat, selectedAsset, onAssetChange, externalTf }
   useEffect(() => {
     if (selectedAsset && selectedAsset !== chartAsset) setChartAsset(selectedAsset)
   }, [selectedAsset])
+
+  // Pin timeframe to the active strategy's timeframe when one is running
+  useEffect(() => {
+    if (externalTf) setTf(externalTf)
+  }, [externalTf])
   const [signal,      setSignal]      = useState(null)
   const [loading,     setLoading]     = useState(false)
   const [lastUpdate,  setLastUpdate]  = useState(null)
@@ -2631,24 +2636,6 @@ function Overview({ user, summary, setActiveSection }) {
   const [chartAsset,    setChartAsset]    = useState("XAUUSD")
   const [signal,        setSignal]        = useState(null)
 
-  // When chart asset changes — auto-run signal AND market intel in background
-  useEffect(() => {
-    setSignal(null)
-    setRegime(null)
-    setIntelLoading(true)
-    // Run both in parallel
-    Promise.allSettled([
-      api.post("/signal/run", { asset: chartAsset, timeframe: "M5" }),
-      api.post("/signal/market-intel", { symbol: chartAsset, timeframe: "H1", periods: 200 }),
-    ]).then(([sigRes, intelRes]) => {
-      if (sigRes.status === "fulfilled") setSignal(sigRes.value.data)
-      if (intelRes.status === "fulfilled") setRegime(intelRes.value.data)
-      setIntelLoading(false)
-    })
-  }, [chartAsset])
-
-  // Keep selectedAsset in sync with chartAsset
-  useEffect(() => { setSelectedAsset(chartAsset) }, [chartAsset])
   const [strategies,     setStrategies]     = useState([])
   const [myStrategies,   setMyStrategies]   = useState([])
   const [selectedStrat,  setSelectedStrat]  = useState("")
@@ -2659,6 +2646,29 @@ function Overview({ user, summary, setActiveSection }) {
   const [mt5Balance,     setMt5Balance]     = useState(null)
   const [mt5Status,      setMt5Status]      = useState(null)
   const [livePositions,  setLivePositions]  = useState([])
+
+  // When chart asset (or active strategy) changes — auto-run signal AND market intel
+  useEffect(() => {
+    setSignal(null)
+    setRegime(null)
+    setIntelLoading(true)
+    const strat = myStrategies.find(s => s.is_active)
+    const tf = strat?.custom_params?.timeframe || "M5"
+    const sigBody = { asset: chartAsset, timeframe: tf }
+    if (strat?.custom_params) sigBody.params = strat.custom_params
+    // Run both in parallel
+    Promise.allSettled([
+      api.post("/signal/run", sigBody),
+      api.post("/signal/market-intel", { symbol: chartAsset, timeframe: "H1", periods: 200 }),
+    ]).then(([sigRes, intelRes]) => {
+      if (sigRes.status === "fulfilled") setSignal(sigRes.value.data)
+      if (intelRes.status === "fulfilled") setRegime(intelRes.value.data)
+      setIntelLoading(false)
+    })
+  }, [chartAsset, activeStratId])
+
+  // Keep selectedAsset in sync with chartAsset
+  useEffect(() => { setSelectedAsset(chartAsset) }, [chartAsset])
 
   const showStratToast = (msg) => { setStratToast(msg); setTimeout(() => setStratToast(""), 3000) }
 
@@ -3004,7 +3014,7 @@ function Overview({ user, summary, setActiveSection }) {
       <OverviewLivePositions />
 
       {/* Row 3: Market Watch — full width strip */}
-      <MarketWatchStrip onSelectAsset={setSelectedAsset} selectedAsset={selectedAsset} />
+      <MarketWatchStrip onSelectAsset={setChartAsset} selectedAsset={selectedAsset} />
       {stratToast && <div style={{ position: "fixed", bottom: 24, right: 24, background: stratToast.startsWith("✓") ? C.green : C.gold, color: "#000", padding: "12px 20px", fontFamily: C.mono, fontSize: 11, borderRadius: 8, fontWeight: 600, zIndex: 999 }}>{stratToast}</div>}
 
       {/* Row 4: Calendar + News tabs — full width */}
